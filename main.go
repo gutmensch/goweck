@@ -6,11 +6,12 @@ import (
 	"log"
 	"net/http"
 	//"os"
-	"time"
+	//"errors"
 	"strings"
+	"time"
 	//"strconv"
 
-        . "github.com/gutmensch/goweck/appbase"
+	. "github.com/gutmensch/goweck/appbase"
 
 	"github.com/globalsign/mgo"
 	"github.com/globalsign/mgo/bson"
@@ -21,70 +22,114 @@ type Alarm struct {
 	ID            bson.ObjectId `bson:"_id,omitempty"`
 	FourDigitTime string
 	CreatedAt     time.Time
-        WeekDays      bool
-        WeekEnds      bool
-        RaumserverUrl string
-        AlarmZone     string
-        RadioChannel  string
-        VolumeStart   int
-        VolumeEnd     int
-        TimeoutSec    int
+	WeekDays      bool
+	WeekEnds      bool
+	RaumserverUrl string
+	AlarmZone     string
+	RadioChannel  string
+	VolumeStart   int
+	VolumeEnd     int
+	VolumeIncInt  int
+	Timeout       int
 }
 
 var (
-	MongoDbDrop = true
-	MongoDb  = "goweck"
-	MongoUri = "mongodb://192.168.2.1:27017"
-	ListenPort = 8080
-	CheckInterval = 2
-        Database *mgo.Database
-	AlarmZoneId = "uuid:C43C1A1D-AED1-472B-B0D0-210B7925000E"
-	AlarmActive = false
-	NetClient = &http.Client{ Timeout: time.Second * 10 }
+	RaumserverDebug = false
+	MongoDbDrop     = true
+	MongoDb         = "goweck"
+	MongoUri        = "mongodb://192.168.2.1:27017"
+	ListenPort      = 8080
+	CheckInterval   = 5
+	Database        *mgo.Database
+	AlarmZoneId     = "uuid:C43C1A1D-AED1-472B-B0D0-210B7925000E"
+	AlarmActive     = false
+	NetClient       = &http.Client{Timeout: time.Second * 10}
 )
 
-func playRaumfeldStream(alarm *Alarm) {
-    req, err := http.NewRequest("GET", fmt.Sprintf("%s/controller/loadUri", alarm.RaumserverUrl), nil)
-    Fatal(err)
+func raumfeldAction(raumfeld string, uri string, params map[string]string) error {
+	req, err := http.NewRequest("GET", fmt.Sprintf("%s%s", raumfeld, uri), nil)
+	if err != nil {
+		return err
+	}
 
-    q := req.URL.Query()
-    q.Add("id", AlarmZoneId)
-    q.Add("value", alarm.RadioChannel)
-    req.URL.RawQuery = q.Encode()
+	q := req.URL.Query()
+	for k, v := range params {
+		q.Add(k, v)
+	}
+	req.URL.RawQuery = q.Encode()
+	if RaumserverDebug {
+		fmt.Println(req.URL.String())
+	}
+	resp, err := NetClient.Do(req)
+	if RaumserverDebug {
+		fmt.Println(resp)
+	}
 
-    resp, err := NetClient.Do(req)
-    fmt.Println(resp)
-    Log(err)
+	return err
 }
 
-func adjustRaumfeldVolume(volume int) {
+func playRaumfeldStream(alarm *Alarm) error {
+	params := map[string]string{
+		"id":    AlarmZoneId,
+		"value": alarm.RadioChannel,
+	}
+	err := raumfeldAction(alarm.RaumserverUrl, "/controller/loadUri", params)
+	return err
 }
 
-func stopRaumfeldStream() {
+func adjustRaumfeldVolume(alarm *Alarm, volume int) error {
+	params := map[string]string{
+		"id":    AlarmZoneId,
+		"scope": "zone",
+		"value": fmt.Sprint(volume),
+	}
+	err := raumfeldAction(alarm.RaumserverUrl, "/controller/setVolume", params)
+	return err
+}
+
+func stopRaumfeldStream(alarm *Alarm) error {
+	params := map[string]string{
+		"id": AlarmZoneId,
+	}
+	err := raumfeldAction(alarm.RaumserverUrl, "/controller/stop", params)
+	return err
 }
 
 func executeAlarm(alarm *Alarm) {
-	fmt.Println(alarm.RadioChannel)
-	//response, _ := NetClient.Get("http://qnap:3535/raumserver/data/getVersion")
-        playRaumfeldStream(alarm)
-	//fmt.Println(response)
-	time.Sleep(time.Duration(20) * time.Second)
+	// play stream for wake up
+	err := adjustRaumfeldVolume(alarm, alarm.VolumeStart)
+	Log(err)
+	err = playRaumfeldStream(alarm)
+	Log(err)
+	// inc volume over time
+	steps := alarm.VolumeEnd - alarm.VolumeStart
+	for i := 1; i <= steps; i++ {
+		fmt.Println("adjusting volume to", alarm.VolumeStart+i)
+		err = adjustRaumfeldVolume(alarm, alarm.VolumeStart+i)
+		Log(err)
+		time.Sleep(time.Duration(alarm.VolumeIncInt) * time.Second)
+	}
+	// sleep for the rest of the alarm active time
+	time.Sleep(time.Duration(alarm.Timeout-steps*alarm.VolumeIncInt) * time.Second)
+	// cleanup and unset alarm
+	err = adjustRaumfeldVolume(alarm, alarm.VolumeStart)
+	Log(err)
+	err = stopRaumfeldStream(alarm)
+	Log(err)
 	AlarmActive = false
-///controller/load" + type + "',"+ JSON.stringify(paramsLoad) +");setTimeout(function(){queryRaumserver('/controller/play'," + JSON.stringify(paramsPlay) + ")},3000);";
-//'/controller/loadUri',{"id":"uuid:C43C1A1D-AED1-472B-B0D0-210B7925000E","value":"http://mp3channels.webradio.rockantenne.de/alternative"});setTimeout(function(){queryRaumserver('/controller/play',{"id":"uuid:C43C1A1D-AED1-472B-B0D0-210B7925000E"})}'
 }
 
 func pollAlarm() {
 	var result Alarm
-	c := Database.C("alarm").With( Database.Session.Copy() )
+	c := Database.C("alarm").With(Database.Session.Copy())
 
 	for {
 		<-time.After(time.Duration(CheckInterval) * time.Second)
-                t := time.Now()
+		t := time.Now()
 		err := c.Find(bson.M{"fourdigittime": fmt.Sprintf("%02d%02d", t.Hour(), t.Minute())}).One(&result)
-                if err != nil && strings.Contains(err.Error(), "not found") {
+		if err != nil && strings.Contains(err.Error(), "not found") {
 			fmt.Println("no alarm found")
-                } else {
+		} else {
 			if AlarmActive == false {
 				fmt.Println("executing alarm")
 				AlarmActive = true
@@ -92,8 +137,7 @@ func pollAlarm() {
 			} else {
 				fmt.Println("alarm is already active")
 			}
-                }
-
+		}
 	}
 }
 
@@ -101,21 +145,20 @@ func main() {
 	// initialize database
 	session, err := mgo.Dial(GetEnvVar("MONGODB_URI", MongoUri))
 	defer session.Close()
-        Fatal(err)
+	Fatal(err)
 
 	session.SetMode(mgo.Monotonic, true)
 
 	if MongoDbDrop {
 		err = session.DB(MongoDb).DropDatabase()
-                Log(err)
+		Log(err)
 	}
-        Database = session.DB(MongoDb)
+	Database = session.DB(MongoDb)
 
-        ensureIndices()
+	ensureIndices()
 
 	saveAlarm("0600", true, false, "BRF")
-	saveAlarm("0700", true, false, "RockAntenne")
-	saveAlarm("1730", true, false, "http://mp3channels.webradio.rockantenne.de/alternative")
+	saveAlarm("2239", true, false, "http://mp3channels.webradio.rockantenne.de/alternative")
 
 	// execute or change alarms periodically
 	go pollAlarm()
@@ -132,7 +175,7 @@ func main() {
 
 //func ensureIndices(db *mgo.Database) {
 func ensureIndices() {
-	c := Database.C("alarm").With( Database.Session.Copy() )
+	c := Database.C("alarm").With(Database.Session.Copy())
 
 	index := mgo.Index{
 		Key:        []string{"fourdigittime"},
@@ -143,24 +186,25 @@ func ensureIndices() {
 	}
 
 	err := c.EnsureIndex(index)
-        Fatal(err)
+	Fatal(err)
 }
 
 func saveAlarm(fourDigitTime string, weekDays bool, weekEnds bool, radioChannel string) {
-    c := Database.C("alarm").With( Database.Session.Copy() )
-    err := c.Insert(&Alarm{
-	FourDigitTime: fourDigitTime,
-	CreatedAt: time.Now(),
-	WeekDays: weekDays,
-	WeekEnds: weekEnds,
-	RaumserverUrl: "http://qnap:3535/raumserver",
-	RadioChannel: radioChannel,
-	AlarmZone: "all",
-	VolumeStart: 30,
-	VolumeEnd: 50,
-	TimeoutSec: 3600,
-    })
-    Fatal(err)
+	c := Database.C("alarm").With(Database.Session.Copy())
+	err := c.Insert(&Alarm{
+		FourDigitTime: fourDigitTime,
+		CreatedAt:     time.Now(),
+		WeekDays:      weekDays,
+		WeekEnds:      weekEnds,
+		RaumserverUrl: "http://qnap:3535/raumserver",
+		RadioChannel:  radioChannel,
+		AlarmZone:     "all",
+		VolumeStart:   20,
+		VolumeEnd:     40,
+		VolumeIncInt:  10,
+		Timeout:       3600,
+	})
+	Fatal(err)
 }
 
 func ReleaseGetHandler(w http.ResponseWriter, r *http.Request) {
