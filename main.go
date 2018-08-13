@@ -1,7 +1,7 @@
 package main
 
 import (
-	//"encoding/json"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
@@ -20,7 +20,7 @@ import (
 
 type Alarm struct {
 	ID            bson.ObjectId `bson:"_id,omitempty"`
-	FourDigitTime string
+	HourMinute    string
 	CreatedAt     time.Time
 	WeekDays      bool
 	WeekEnds      bool
@@ -126,7 +126,7 @@ func pollAlarm() {
 	for {
 		<-time.After(time.Duration(CheckInterval) * time.Second)
 		t := time.Now()
-		err := c.Find(bson.M{"fourdigittime": fmt.Sprintf("%02d%02d", t.Hour(), t.Minute())}).One(&result)
+		err := c.Find(bson.M{"hourminute": fmt.Sprintf("%02d%02d", t.Hour(), t.Minute())}).One(&result)
 		if err != nil && strings.Contains(err.Error(), "not found") {
 			fmt.Println("no alarm found")
 		} else {
@@ -165,9 +165,8 @@ func main() {
 
 	// http endpoint for dealing with alarms
 	mux := bone.New()
-
-	mux.Get("/release/:id", http.HandlerFunc(ReleaseGetHandler))
-	mux.Post("/release", http.HandlerFunc(ReleasePostHandler))
+	mux.Get("/alarm", http.HandlerFunc(AlarmGetHandler))
+	mux.Post("/alarm", http.HandlerFunc(AlarmPostHandler))
 	mux.Handle("/", http.HandlerFunc(DocumentationHandler))
 
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", ListenPort), mux))
@@ -178,7 +177,7 @@ func ensureIndices() {
 	c := Database.C("alarm").With(Database.Session.Copy())
 
 	index := mgo.Index{
-		Key:        []string{"fourdigittime"},
+		Key:        []string{"hourminute"},
 		Unique:     true,
 		DropDups:   true,
 		Background: true,
@@ -189,10 +188,10 @@ func ensureIndices() {
 	Fatal(err)
 }
 
-func saveAlarm(fourDigitTime string, weekDays bool, weekEnds bool, radioChannel string) {
+func saveAlarm(hourMinute string, weekDays bool, weekEnds bool, radioChannel string) {
 	c := Database.C("alarm").With(Database.Session.Copy())
 	err := c.Insert(&Alarm{
-		FourDigitTime: fourDigitTime,
+		HourMinute:    hourMinute,
 		CreatedAt:     time.Now(),
 		WeekDays:      weekDays,
 		WeekEnds:      weekEnds,
@@ -207,10 +206,19 @@ func saveAlarm(fourDigitTime string, weekDays bool, weekEnds bool, radioChannel 
 	Fatal(err)
 }
 
-func ReleaseGetHandler(w http.ResponseWriter, r *http.Request) {
+func AlarmGetHandler(w http.ResponseWriter, r *http.Request) {
+	var results []Alarm
+	c := Database.C("alarm").With(Database.Session.Copy())
+	err := c.Find(bson.M{}).All(&results)
+	Fatal(err)
+	for _, alarm := range results {
+		e, err := json.Marshal(alarm)
+		Log(err)
+		fmt.Fprintf(w, "%q", string(e))
+	}
 }
 
-func ReleasePostHandler(w http.ResponseWriter, r *http.Request) {
+func AlarmPostHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func DocumentationHandler(w http.ResponseWriter, r *http.Request) {
