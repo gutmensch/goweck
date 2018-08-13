@@ -38,10 +38,40 @@ var (
 	ListenPort = 8080
 	CheckInterval = 2
         Database *mgo.Database
+	AlarmZoneId = "uuid:C43C1A1D-AED1-472B-B0D0-210B7925000E"
+	AlarmActive = false
+	NetClient = &http.Client{ Timeout: time.Second * 10 }
 )
+
+func playRaumfeldStream(alarm *Alarm) {
+    req, err := http.NewRequest("GET", fmt.Sprintf("%s/controller/loadUri", alarm.RaumserverUrl), nil)
+    Fatal(err)
+
+    q := req.URL.Query()
+    q.Add("id", AlarmZoneId)
+    q.Add("value", alarm.RadioChannel)
+    req.URL.RawQuery = q.Encode()
+
+    resp, err := NetClient.Do(req)
+    fmt.Println(resp)
+    Log(err)
+}
+
+func adjustRaumfeldVolume(volume int) {
+}
+
+func stopRaumfeldStream() {
+}
 
 func executeAlarm(alarm *Alarm) {
 	fmt.Println(alarm.RadioChannel)
+	//response, _ := NetClient.Get("http://qnap:3535/raumserver/data/getVersion")
+        playRaumfeldStream(alarm)
+	//fmt.Println(response)
+	time.Sleep(time.Duration(20) * time.Second)
+	AlarmActive = false
+///controller/load" + type + "',"+ JSON.stringify(paramsLoad) +");setTimeout(function(){queryRaumserver('/controller/play'," + JSON.stringify(paramsPlay) + ")},3000);";
+//'/controller/loadUri',{"id":"uuid:C43C1A1D-AED1-472B-B0D0-210B7925000E","value":"http://mp3channels.webradio.rockantenne.de/alternative"});setTimeout(function(){queryRaumserver('/controller/play',{"id":"uuid:C43C1A1D-AED1-472B-B0D0-210B7925000E"})}'
 }
 
 func pollAlarm() {
@@ -55,7 +85,13 @@ func pollAlarm() {
                 if err != nil && strings.Contains(err.Error(), "not found") {
 			fmt.Println("no alarm found")
                 } else {
-			go executeAlarm(&result)
+			if AlarmActive == false {
+				fmt.Println("executing alarm")
+				AlarmActive = true
+				go executeAlarm(&result)
+			} else {
+				fmt.Println("alarm is already active")
+			}
                 }
 
 	}
@@ -73,21 +109,13 @@ func main() {
 		err = session.DB(MongoDb).DropDatabase()
                 Log(err)
 	}
-
         Database = session.DB(MongoDb)
 
         ensureIndices()
 
 	saveAlarm("0600", true, false, "BRF")
 	saveAlarm("0700", true, false, "RockAntenne")
-	saveAlarm("1639", true, false, "RockAntenne")
-
-	var result Alarm
-	c := Database.C("alarm").With( Database.Session.Copy() )
-	err = c.Find(bson.M{"radiochannel": "BRF"}).One(&result)
-        Log(err)
-
-	fmt.Println("Result: ", result)
+	saveAlarm("1730", true, false, "http://mp3channels.webradio.rockantenne.de/alternative")
 
 	// execute or change alarms periodically
 	go pollAlarm()
@@ -97,7 +125,6 @@ func main() {
 
 	mux.Get("/release/:id", http.HandlerFunc(ReleaseGetHandler))
 	mux.Post("/release", http.HandlerFunc(ReleasePostHandler))
-
 	mux.Handle("/", http.HandlerFunc(DocumentationHandler))
 
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", ListenPort), mux))
@@ -134,9 +161,6 @@ func saveAlarm(fourDigitTime string, weekDays bool, weekEnds bool, radioChannel 
 	TimeoutSec: 3600,
     })
     Fatal(err)
-}
-
-func checkActiveAlarm() {
 }
 
 func ReleaseGetHandler(w http.ResponseWriter, r *http.Request) {
