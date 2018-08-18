@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<title>GoWeck - Alarm Clock for Raumserver</title>
+	<meta charset="utf-8"  />
+	<link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/timepicker/1.3.5/jquery.timepicker.css" />
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+	<style type="text/css">
+  table.currentAlarms {
+		border-collapse: collapse;
+	}
+	td.tblth {
+		font-weight: bold;
+		text-align: center;
+    padding: 3px;
+		border: 1px solid black;
+	}
+	td.tbltd {
+		text-align: center;
+		padding: 2px;
+		border: 1px solid black;
+	}
+	input.center {
+		display: block;
+		margin : 0 auto;
+	}
+	</style>
+	<script type="text/javascript">
+	function getAlarms() {
+    var testAlarms = JSON.parse("[{\"_id\":\"5b789964c77c0b994af3fde0\",\"enable\":true,\"hourMinute\":\"1601\",\"createdAt\":\"2018-08-18T22:10:44.199Z\",\"weekDays\":true,\"weekEnds\":false,\"raumserverUri\":\"http://qnap:3535/raumserver\",\"alarmZone\":\"uuid:C43C1A1D-AED1-472B-B0D0-210B7925000E\",\"radioChannel\":\"http://mp3channels.webradio.rockantenne.de/alternative\",\"volumeStart\":15,\"volumeEnd\":45,\"volumeIncStep\":1,\"volumeIncInt\":20,\"timeout\":3600}]")
+		//var alarms = ...
+		var t = document.getElementById('currentAlarms');
+		var tr_head = t.insertRow();
+		var captions = ['Enabled', 'Time', 'WeekDays', 'Weekend', 'Stream', 'Delete'];
+		captions.forEach(function(h) {
+			td = tr_head.insertCell();
+			td.className = 'tblth';
+			td.appendChild(document.createTextNode(h));
+		});
+		var docVal = ['enable', 'hourMinute', 'weekDays', 'weekEnds', 'radioChannel'];
+		testAlarms.forEach(function(alarm) {
+			var tr_alarm = t.insertRow();
+			docVal.forEach(function(k){
+				td = tr_alarm.insertCell();
+				td.className = 'tbltd';
+				td.appendChild(document.createTextNode(alarm[k]));
+			});
+			var td_delete = document.createElement("td");
+	    td_delete.className = "tbltd";
+	    td_delete.innerHTML = "<i class=\"fa fa-trash\"></i>";
+	    tr_alarm.appendChild(td_delete);
+		});
+	}
+	function setAlarm() {
+
+	}
+	function deleteAlarm() {
+
+	}
+	</script>
+</head>
+
+<body onload="getAlarms()">
+	<p class="lead text-center">
+		Current alarms
+		<table align="center" class="currentAlarms" id="currentAlarms">
+    </table>
+	</p>
+
+	<p class="lead text-center">
+		Create new alarm
+		<table class="currentAlarms" align="center">
+			<tr><td class="tblth">Enable</td><td class="tblth">Time</td><td class="tblth">WeekDays</td><td class="tblth">Weekend</td><td class="tblth">Stream</td><td class="tblth">Add</td></tr>
+			<tr>
+	<td class="tbltd"><input type="checkbox" class="checkbox center" id="alarmEnabled" /></td>
+	<td class="tbltd"><input class="timepicker text-center" jt-timepicker time="model.time" time-string="model.timeString" default-time="model.options.defaultTime" time-format="model.options.timeFormat" start-time="model.options.startTime" min-time="model.options.minTime" max-time="model.options.maxTime" interval="model.options.interval" dynamic="model.options.dynamic" scrollbar="model.options.scrollbar" dropdown="model.options.dropdown" /></td>
+  <td class="tbltd"><input type="checkbox" class="checkbox center" id="weekDaysEnabled" /></td>
+	<td class="tbltd"><input type="checkbox" class="checkbox center" id="weekEndsEnabled" /></td>
+	<td class="tbltd"><select name="channel">
+  <option value="volvo">Volvo</option>
+  <option value="saab">Saab</option>
+  <option value="fiat">Fiat</option>
+  <option value="audi">Audi</option>
+</select></td>
+<td class="tbltd"><i class="fa fa-plus-square"></i></td>
+</tr>
+</table>
+	</p>
+
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/1/jquery.min.js"></script>
+	<script src="https://netdna.bootstrapcdn.com/bootstrap/3.1.1/js/bootstrap.min.js"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/timepicker/1.3.5/jquery.timepicker.min.js"></script>
+  <script>
+	$(document).ready(function(){
+	$('input.timepicker').timepicker({
+    timeFormat: 'HH:mm',
+    interval: 30,
+    minTime: '00',
+    maxTime: '23',
+    defaultTime: '07',
+    startTime: '04',
+    dynamic: false,
+    dropdown: true,
+    scrollbar: true
+});
+});
+	</script>
+
+</body>
+</html>

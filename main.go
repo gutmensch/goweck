@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"strconv"
 	//"os"
 	//"errors"
 
@@ -15,37 +16,38 @@ import (
 
 	"github.com/globalsign/mgo"
 	"github.com/globalsign/mgo/bson"
-	"github.com/go-zoo/bone"
+	"github.com/gorilla/mux"
 )
 
 type Alarm struct {
-	ID            bson.ObjectId `bson:"_id,omitempty"`
-	HourMinute    string
-	CreatedAt     time.Time
-	WeekDays      bool
-	WeekEnds      bool
-	RaumserverUrl string
-	AlarmZone     string
-	RadioChannel  string
-	VolumeStart   int
-	VolumeEnd     int
-	VolumeIncStep int
-	VolumeIncInt  int
-	Timeout       int
+	ID            bson.ObjectId `bson:"_id,omitempty" json:"_id,omitempty"`
+	Enable        bool          `bson:"enable"        json:"enable"`
+	HourMinute    string        `bson:"hourMinute"    json:"hourMinute"`
+	CreatedAt     time.Time     `bson:"createdAt"     json:"createdAt"`
+	WeekDays      bool          `bson:"weekDays"      json:"weekDays"`
+	WeekEnds      bool          `bson:"weekEnds"      json:"weekEnds"`
+	RaumserverUri string        `bson:"raumserverUri" json:"raumserverUri"`
+	AlarmZone     string        `bson:"alarmZone"     json:"alarmZone"`
+	RadioChannel  string        `bson:"radioChannel"  json:"radioChannel"`
+	VolumeStart   int           `bson:"volumeStart"   json:"volumeStart"`
+	VolumeEnd     int           `bson:"volumeEnd"     json:"volumeEnd"`
+	VolumeIncStep int           `bson:"volumeIncStep" json:"volumeIncStep"`
+	VolumeIncInt  int           `bson:"volumeIncInt"  json:"volumeIncInt"`
+	Timeout       int           `bson:"timeout"       json:"timeout"`
 }
 
 var (
-	Debug           = false
-	RaumserverDebug = false
-	MongoDbDrop     = true
-	MongoDb         = "goweck"
-	MongoUri        = "mongodb://192.168.2.1:27017"
-	ListenPort      = 8080
-	CheckInterval   = 5
-	Database        *mgo.Database
-	RaumserverUrl   = "http://qnap:3535/raumserver"
-	AlarmActive     = false
-	NetClient       = &http.Client{Timeout: time.Second * 10}
+	Debug, _           = strconv.ParseBool(GetEnvVar("DEBUG", "false"))
+	RaumserverDebug, _ = strconv.ParseBool(GetEnvVar("RAUMSERVER_DEBUG", "false"))
+	MongoDbDrop, _     = strconv.ParseBool(GetEnvVar("MONGODB_DROP", "false"))
+	MongoDb            = GetEnvVar("MONGODB_DATABASE", "goweck")
+	MongoUri           = GetEnvVar("MONGODB_URI", "mongodb://127.0.0.1:27017")
+	Listen             = GetEnvVar("LISTEN", ":8080")
+	CheckInterval      = 5
+	Database           *mgo.Database
+	RaumserverUri      = GetEnvVar("RAUMSERVER_URI", "http://127.0.0.1:3535/raumserver")
+	AlarmActive        = false
+	NetClient          = &http.Client{Timeout: time.Second * 10}
 )
 
 func raumfeldAction(raumfeld string, uri string, params map[string]string) error {
@@ -75,7 +77,7 @@ func playRaumfeldStream(alarm *Alarm) error {
 		"id":    alarm.AlarmZone,
 		"value": alarm.RadioChannel,
 	}
-	err := raumfeldAction(alarm.RaumserverUrl, "/controller/loadUri", params)
+	err := raumfeldAction(alarm.RaumserverUri, "/controller/loadUri", params)
 	return err
 }
 
@@ -85,7 +87,7 @@ func adjustRaumfeldVolume(alarm *Alarm, volume int) error {
 		"scope": "zone",
 		"value": fmt.Sprint(volume),
 	}
-	err := raumfeldAction(alarm.RaumserverUrl, "/controller/setVolume", params)
+	err := raumfeldAction(alarm.RaumserverUri, "/controller/setVolume", params)
 	return err
 }
 
@@ -93,7 +95,7 @@ func stopRaumfeldStream(alarm *Alarm) error {
 	params := map[string]string{
 		"id": alarm.AlarmZone,
 	}
-	err := raumfeldAction(alarm.RaumserverUrl, "/controller/stop", params)
+	err := raumfeldAction(alarm.RaumserverUri, "/controller/stop", params)
 	return err
 }
 
@@ -129,13 +131,13 @@ func pollAlarm() {
 		<-time.After(time.Duration(CheckInterval) * time.Second)
 
 		if AlarmActive == true {
-			fmt.Println("alarm is currently active")
+			fmt.Println("[pollAlarm] alarm is currently active")
 			continue
 		}
 
 		t := time.Now()
-		weekDays, weekEnds := true, true
 
+		weekDays, weekEnds := true, true
 		switch int(t.Weekday()) {
 		case 0, 6:
 			weekDays, weekEnds = false, true
@@ -143,24 +145,26 @@ func pollAlarm() {
 			weekDays, weekEnds = true, false
 		}
 
-		err := c.Find(bson.M{"hourminute": fmt.Sprintf("%02d%02d", t.Hour(), t.Minute()), "weekdays": weekDays, "weekends": weekEnds}).One(&result)
+		err := c.Find(bson.M{
+			"hourMinute": fmt.Sprintf("%02d%02d", t.Hour(), t.Minute()),
+			"weekDays":   weekDays,
+			"weekEnds":   weekEnds,
+		}).One(&result)
 		if err == mgo.ErrNotFound || err != nil {
-			fmt.Println("no scheduled alarm found")
 			if Debug {
 				fmt.Println(err.Error())
 			}
 			continue
 		}
 
-		fmt.Println("executing alarm")
+		fmt.Println("[pollAlarm] alarm for current time and day found, executing.")
 		AlarmActive = true
 		go executeAlarm(&result)
 	}
 }
 
 func main() {
-	// initialize database
-	session, err := mgo.Dial(GetEnvVar("MONGODB_URI", MongoUri))
+	session, err := mgo.Dial(MongoUri)
 	defer session.Close()
 	Fatal(err)
 
@@ -180,19 +184,15 @@ func main() {
 	go pollAlarm()
 
 	// http endpoint for dealing with alarms
-	mux := bone.New()
-	mux.Get("/alarm", http.HandlerFunc(AlarmGetHandler))
-	mux.Post("/alarm", http.HandlerFunc(AlarmPostHandler))
-	mux.Handle("/", http.HandlerFunc(DocumentationHandler))
-
-	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", ListenPort), mux))
+	mux := httpRouter()
+	log.Fatal(http.ListenAndServe(Listen, mux))
 }
 
 func ensureIndices() {
 	c := Database.C("alarm").With(Database.Session.Copy())
 
 	index := mgo.Index{
-		Key:        []string{"hourminute", "weekdays", "weekends"},
+		Key:        []string{"hourMinute", "weekDays", "weekEnds"},
 		Unique:     true,
 		DropDups:   true,
 		Background: true,
@@ -206,11 +206,12 @@ func ensureIndices() {
 func saveAlarm(hourMinute string, weekDays bool, weekEnds bool, zoneId string, radioChannel string) {
 	c := Database.C("alarm").With(Database.Session.Copy())
 	err := c.Insert(&Alarm{
+		Enable:        true,
 		HourMinute:    hourMinute,
 		CreatedAt:     time.Now(),
 		WeekDays:      weekDays,
 		WeekEnds:      weekEnds,
-		RaumserverUrl: RaumserverUrl,
+		RaumserverUri: RaumserverUri,
 		RadioChannel:  radioChannel,
 		AlarmZone:     zoneId,
 		VolumeStart:   15,
@@ -222,16 +223,32 @@ func saveAlarm(hourMinute string, weekDays bool, weekEnds bool, zoneId string, r
 	Fatal(err)
 }
 
+func httpRouter() *mux.Router {
+	r := mux.NewRouter()
+	r.HandleFunc("/alarm", http.HandlerFunc(AlarmGetHandler)).Methods("GET")
+	staticFileDirectory := http.Dir("./assets/")
+	staticFileHandler := http.StripPrefix("/assets/", http.FileServer(staticFileDirectory))
+	r.PathPrefix("/assets/").Handler(staticFileHandler).Methods("GET")
+
+	//r.Get("/alarm", http.HandlerFunc(AlarmGetHandler))
+	//r.Post("/alarm", http.HandlerFunc(AlarmPostHandler))
+	//r.Handle("/", http.HandlerFunc(DocumentationHandler))
+
+	//staticFileDirectory := http.Dir("./assets/")
+	//staticFileHandler := http.StripPrefix("/assets/", http.FileServer(staticFileDirectory))
+	//r.Prefix("/assets/").Handl
+
+	return r
+}
+
 func AlarmGetHandler(w http.ResponseWriter, r *http.Request) {
 	var results []Alarm
 	c := Database.C("alarm").With(Database.Session.Copy())
 	err := c.Find(bson.M{}).All(&results)
 	Fatal(err)
-	for _, alarm := range results {
-		e, err := json.Marshal(alarm)
-		Log(err)
-		fmt.Fprintf(w, "%q\n", string(e))
-	}
+	e, err := json.Marshal(results)
+	Log(err)
+	fmt.Fprintf(w, "%q\n", string(e))
 }
 
 func AlarmPostHandler(w http.ResponseWriter, r *http.Request) {
