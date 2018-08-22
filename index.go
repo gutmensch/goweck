@@ -1,4 +1,6 @@
-<!DOCTYPE html>
+package main
+
+var IndexHtml = `<!DOCTYPE html>
 <html>
 
 <head>
@@ -29,9 +31,8 @@
 	</style>
 	<script type="text/javascript">
 	function getAlarms() {
-    var testAlarms = JSON.parse("[{\"_id\":\"5b789964c77c0b994af3fde0\",\"enable\":true,\"hourMinute\":\"16:01\",\"createdAt\":\"2018-08-18T22:10:44.199Z\",\"weekDays\":true,\"weekEnds\":false,\"raumserverUri\":\"http://qnap:3535/raumserver\",\"alarmZone\":\"uuid:C43C1A1D-AED1-472B-B0D0-210B7925000E\",\"radioChannel\":\"http://mp3channels.webradio.rockantenne.de/alternative\",\"volumeStart\":15,\"volumeEnd\":45,\"volumeIncStep\":1,\"volumeIncInt\":20,\"timeout\":3600}]")
-		//var alarms = ...
 		var t = document.getElementById('currentAlarms');
+		t.innerHTML = "";
 		var tr_head = t.insertRow();
 		var captions = ['Enabled', 'Time', 'WeekDays', 'Weekend', 'Stream', 'Delete'];
 		captions.forEach(function(h) {
@@ -40,24 +41,57 @@
 			td.appendChild(document.createTextNode(h));
 		});
 		var docVal = ['enable', 'hourMinute', 'weekDays', 'weekEnds', 'radioChannel'];
-		testAlarms.forEach(function(alarm) {
-			var tr_alarm = t.insertRow();
-			docVal.forEach(function(k){
-				td = tr_alarm.insertCell();
-				td.className = 'tbltd';
-				td.appendChild(document.createTextNode(alarm[k]));
-			});
-			var td_delete = document.createElement("td");
-	    td_delete.className = "tbltd";
-	    td_delete.innerHTML = "<i class=\"fa fa-trash\"></i>";
-	    tr_alarm.appendChild(td_delete);
+		$.getJSON("/alarms", function(data) {
+			if (data !== "null") {
+				JSON.parse(data).forEach(function(alarm) {
+					var tr_alarm = t.insertRow();
+					docVal.forEach(function(k){
+						td = tr_alarm.insertCell();
+						td.className = 'tbltd';
+						td.appendChild(document.createTextNode(alarm[k]));
+					});
+					var td_delete = document.createElement("td");
+					td_delete.className = "tbltd";
+					td_delete.innerHTML = "<a href=\"#\"><i onclick=\"deleteAlarm('"+alarm['_id']+"')\" class=\"fa fa-trash\"></i></a>";
+					tr_alarm.appendChild(td_delete);
+				});
+		  }
 		});
 	}
-	function setAlarm() {
+	function updateAlarm() {
 
 	}
-	function deleteAlarm() {
-
+	function createAlarm() {
+		var enA = document.getElementById('alarmEnabled').value === "on" ? "true" : "false";
+		var weekD = document.getElementById('weekDaysEnabled').value === "on" ? "true" : "false";
+		var weekE = document.getElementById('weekEndsEnabled').value === "on" ? "true" : "false";
+		var newAlarm = {
+			enable: enA,
+			hourMinute: document.getElementById('timepicker').value,
+			weekDays: weekD,
+			weekEnds: weekE,
+      radioChannel: document.getElementById('channel').value
+		};
+		$.ajax({
+			url: '/alarm',
+			type: 'POST',
+			data: JSON.stringify(newAlarm),
+			contentType: 'application/json',
+			statusCode: {
+				201: function() {
+				  getAlarms();
+			  }
+			}
+		});
+	}
+	function deleteAlarm(id) {
+		$.ajax({
+	    url: '/alarm/' + id,
+	    type: 'DELETE',
+	    success: function(data) {
+				getAlarms();
+			}
+	  });
 	}
 	</script>
 </head>
@@ -75,16 +109,17 @@
 			<tr><td class="tblth">Enable</td><td class="tblth">Time</td><td class="tblth">WeekDays</td><td class="tblth">Weekend</td><td class="tblth">Stream</td><td class="tblth">Add</td></tr>
 			<tr>
 	<td class="tbltd"><input type="checkbox" class="checkbox center" id="alarmEnabled" /></td>
-	<td class="tbltd"><input class="timepicker text-center" jt-timepicker time="model.time" time-string="model.timeString" default-time="model.options.defaultTime" time-format="model.options.timeFormat" start-time="model.options.startTime" min-time="model.options.minTime" max-time="model.options.maxTime" interval="model.options.interval" dynamic="model.options.dynamic" scrollbar="model.options.scrollbar" dropdown="model.options.dropdown" /></td>
+	<td class="tbltd"><input id="timepicker" class="timepicker text-center" jt-timepicker time="model.time" time-string="model.timeString" default-time="model.options.defaultTime" time-format="model.options.timeFormat" start-time="model.options.startTime" min-time="model.options.minTime" max-time="model.options.maxTime" interval="model.options.interval" dynamic="model.options.dynamic" scrollbar="model.options.scrollbar" dropdown="model.options.dropdown" /></td>
   <td class="tbltd"><input type="checkbox" class="checkbox center" id="weekDaysEnabled" /></td>
 	<td class="tbltd"><input type="checkbox" class="checkbox center" id="weekEndsEnabled" /></td>
-	<td class="tbltd"><select name="channel">
-  <option value="volvo">Volvo</option>
-  <option value="saab">Saab</option>
-  <option value="fiat">Fiat</option>
-  <option value="audi">Audi</option>
+	<td class="tbltd"><select name="channel" id="channel">
+  <option value="http://berlin.starfm.de/player/pls/berlin_pls_mp3.php">Star FM</option>
+  <option value="http://mp3channels.webradio.rockantenne.de/alternative">Rock Antenne</option>
+  <option value="http://stream.berliner-rundfunk.de/brf/mp3-128/internetradio">BRF 91.4</option>
+  <option value="http://www.radioberlin.de/live.m3u">Radio Berlin 88.8</option>
+	<option value="http://www.radioeins.de/live.m3u">Radioeins</option>
 </select></td>
-<td class="tbltd"><i class="fa fa-plus-square"></i></td>
+<td class="tbltd"><a onclick="createAlarm()" href="#"><i class="fa fa-plus-square"></i></a></td>
 </tr>
 </table>
 	</p>
@@ -110,3 +145,4 @@
 
 </body>
 </html>
+`

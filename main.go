@@ -7,17 +7,14 @@ import (
 	"log"
 	"net/http"
 	"strconv"
-	//"os"
-	//"errors"
-
 	"time"
-
-	"github.com/gorilla/mux"
-	. "github.com/gutmensch/goweck/appbase"
-	"github.com/imdario/mergo"
 
 	"github.com/globalsign/mgo"
 	"github.com/globalsign/mgo/bson"
+	"github.com/gorilla/mux"
+	"github.com/imdario/mergo"
+
+	. "github.com/gutmensch/goweck/appbase"
 )
 
 type Alarm struct {
@@ -40,15 +37,19 @@ type Alarm struct {
 var (
 	Debug, _           = strconv.ParseBool(GetEnvVar("DEBUG", "false"))
 	RaumserverDebug, _ = strconv.ParseBool(GetEnvVar("RAUMSERVER_DEBUG", "false"))
-	MongoDbDrop, _     = strconv.ParseBool(GetEnvVar("MONGODB_DROP", "false"))
-	MongoDb            = GetEnvVar("MONGODB_DATABASE", "goweck")
-	MongoUri           = GetEnvVar("MONGODB_URI", "mongodb://127.0.0.1:27017")
-	Listen             = GetEnvVar("LISTEN", ":8080")
-	CheckInterval      = 5
-	Database           *mgo.Database
-	RaumserverUri      = GetEnvVar("RAUMSERVER_URI", "http://127.0.0.1:3535/raumserver")
-	AlarmActive        = false
-	NetClient          = &http.Client{Timeout: time.Second * 10}
+	// DB parameters, needed for running
+	MongoDbDrop, _ = strconv.ParseBool(GetEnvVar("MONGODB_DROP", "false"))
+	MongoDb        = GetEnvVar("MONGODB_DATABASE", "goweck")
+	MongoUri       = GetEnvVar("MONGODB_URI", "mongodb://127.0.0.1:27017")
+	Listen         = GetEnvVar("LISTEN", ":8080")
+	CheckInterval  = 5
+	Database       *mgo.Database
+	// defaults for raumserver connection. should be overridden by every specific alarm
+	RaumserverUri = "http://qnap:3535/raumserver"
+	ZoneId        = "uuid:C43C1A1D-AED1-472B-B0D0-210B7925000E"
+	RadioChannel  = "http://mp3channels.webradio.rockantenne.de/alternative"
+	AlarmActive   = false
+	NetClient     = &http.Client{Timeout: time.Second * 10}
 )
 
 func raumfeldAction(raumfeld string, uri string, params map[string]string) error {
@@ -179,8 +180,6 @@ func main() {
 
 	ensureIndices()
 
-	saveAlarm(true, "16:01", true, false, "uuid:C43C1A1D-AED1-472B-B0D0-210B7925000E", "http://mp3channels.webradio.rockantenne.de/alternative")
-
 	// execute or change alarms periodically
 	go pollAlarm()
 
@@ -204,49 +203,20 @@ func ensureIndices() {
 	Fatal(err)
 }
 
-func saveAlarm(enable bool, hourMinute string, weekDays bool, weekEnds bool, zoneId string, radioChannel string) {
-	c := Database.C("alarm").With(Database.Session.Copy())
-	err := c.Insert(&Alarm{
-		Enable:        strconv.FormatBool(enable),
-		HourMinute:    hourMinute,
-		LastModified:  time.Now().String(),
-		WeekDays:      strconv.FormatBool(weekDays),
-		WeekEnds:      strconv.FormatBool(weekEnds),
-		RaumserverUri: RaumserverUri,
-		RadioChannel:  radioChannel,
-		AlarmZone:     zoneId,
-		VolumeStart:   15,
-		VolumeEnd:     45,
-		VolumeIncStep: 1,
-		VolumeIncInt:  20,
-		Timeout:       3600,
-	})
-	Fatal(err)
-}
-
 func httpRouter() *mux.Router {
 	r := mux.NewRouter()
 	r.HandleFunc("/alarms", http.HandlerFunc(AlarmListHandler)).Methods("GET")
 	r.HandleFunc("/alarm", http.HandlerFunc(AlarmCreateHandler)).Methods("POST")
 	r.HandleFunc("/alarm/{id:[0-9a-f]{24}}", http.HandlerFunc(AlarmUpdateHandler)).Methods("POST")
 	r.HandleFunc("/alarm/{id:[0-9a-f]{24}}", http.HandlerFunc(AlarmDeleteHandler)).Methods("DELETE")
-
-	staticFileDirectory := http.Dir("./assets/")
-	staticFileHandler := http.StripPrefix("/assets/", http.FileServer(staticFileDirectory))
-	r.PathPrefix("/assets/").Handler(staticFileHandler).Methods("GET")
-
+	r.HandleFunc("/", http.HandlerFunc(IndexHandler)).Methods("GET")
+	r.HandleFunc("/index.html", http.HandlerFunc(IndexHandler)).Methods("GET")
 	return r
 }
 
-/*
-func getRequestParam(r *http.Request, key string) (string, error) {
-	keys, ok := r.URL.Query()[key]
-	if !ok || len(keys[0]) < 1 {
-		return "", errors.New("parameter missing")
-	}
-	return keys[0], nil
+func IndexHandler(w http.ResponseWriter, r *http.Request) {
+	w.Write([]byte(IndexHtml))
 }
-*/
 
 func AlarmListHandler(w http.ResponseWriter, r *http.Request) {
 	var results []Alarm
@@ -278,7 +248,7 @@ func AlarmUpdateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	err = mergo.Merge(&new, old)
 	Log(err)
-	err = c.UpdateId(bson.ObjectIdHex(vars["id"]), new)
+	err = c.UpdateId(bson.ObjectIdHex(vars["id"]), &new)
 	if err != nil {
 		Log(err)
 		w.WriteHeader(http.StatusUnprocessableEntity)
@@ -301,7 +271,7 @@ func AlarmDeleteHandler(w http.ResponseWriter, r *http.Request) {
 func AlarmCreateHandler(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	Fatal(err)
-	var new, result Alarm
+	var new, def, result Alarm
 	err = json.Unmarshal(body, &new)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -317,6 +287,28 @@ func AlarmCreateHandler(w http.ResponseWriter, r *http.Request) {
 	// bail out early if anything else then NotFound
 	if dupAlarm != mgo.ErrNotFound {
 		w.WriteHeader(http.StatusConflict)
+		return
+	}
+
+	def = Alarm{
+		Enable:        strconv.FormatBool(true),
+		HourMinute:    "08:00",
+		LastModified:  time.Now().String(),
+		WeekDays:      strconv.FormatBool(true),
+		WeekEnds:      strconv.FormatBool(false),
+		RaumserverUri: RaumserverUri,
+		RadioChannel:  RadioChannel,
+		AlarmZone:     ZoneId,
+		VolumeStart:   15,
+		VolumeEnd:     45,
+		VolumeIncStep: 1,
+		VolumeIncInt:  20,
+		Timeout:       3600,
+	}
+	err = mergo.Merge(&new, def)
+	if err != nil {
+		Log(err)
+		w.WriteHeader(http.StatusUnprocessableEntity)
 		return
 	}
 
