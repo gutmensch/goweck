@@ -26,6 +26,7 @@ After=network.target mongodb.service
 
 [Service]
 Type=simple
+Environment=TZ=Europe/Berlin
 Environment=MONGODB_URI=mongodb://127.0.0.1:27017
 Environment=MONGODB_DATABASE=goweck
 Environment=MONGODB_DROP=false
