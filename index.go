@@ -46,9 +46,19 @@ var IndexHtml = `<!DOCTYPE html>
 				JSON.parse(data).forEach(function(alarm) {
 					var tr_alarm = t.insertRow();
 					docVal.forEach(function(k){
-						td = tr_alarm.insertCell();
-						td.className = 'tbltd';
-						td.appendChild(document.createTextNode(alarm[k]));
+						if (k === 'enable') {
+							toggle = document.createElement('a');
+							toggle.setAttribute('onclick', 'toggleAlarm("'+alarm['_id']+'",'+alarm[k]+')');
+							toggle.setAttribute('href', '#');
+							td = tr_alarm.insertCell();
+							td.className = 'tbltd';
+							td.appendChild(toggle);
+							toggle.appendChild(document.createTextNode(alarm[k]));
+						} else {
+							td = tr_alarm.insertCell();
+							td.className = 'tbltd';
+							td.appendChild(document.createTextNode(alarm[k]));
+						}
 					});
 					var td_delete = document.createElement("td");
 					td_delete.className = "tbltd";
@@ -58,18 +68,28 @@ var IndexHtml = `<!DOCTYPE html>
 		  }
 		});
 	}
-	function updateAlarm() {
-
+	function toggleAlarm(id, curr) {
+		var alarmUpdate = {
+			enable: (curr ? false : true).toString(),
+		};
+		$.ajax({
+			url: '/alarm/' + id,
+			type: 'POST',
+			data: JSON.stringify(alarmUpdate),
+			contentType: 'application/json',
+			statusCode: {
+				200: function() {
+				  getAlarms();
+			  }
+			}
+		});
 	}
 	function createAlarm() {
-		var enA = document.getElementById('alarmEnabled').value === "on" ? "true" : "false";
-		var weekD = document.getElementById('weekDaysEnabled').value === "on" ? "true" : "false";
-		var weekE = document.getElementById('weekEndsEnabled').value === "on" ? "true" : "false";
 		var newAlarm = {
-			enable: enA,
+			enable: document.getElementById('alarmEnabled').checked.toString(),
 			hourMinute: document.getElementById('timepicker').value,
-			weekDays: weekD,
-			weekEnds: weekE,
+			weekDays: document.getElementById('weekDaysEnabled').checked.toString(),
+			weekEnds: document.getElementById('weekEndsEnabled').checked.toString(),
       radioChannel: document.getElementById('channel').value
 		};
 		$.ajax({
@@ -113,17 +133,16 @@ var IndexHtml = `<!DOCTYPE html>
   <td class="tbltd"><input type="checkbox" class="checkbox center" id="weekDaysEnabled" /></td>
 	<td class="tbltd"><input type="checkbox" class="checkbox center" id="weekEndsEnabled" /></td>
 	<td class="tbltd"><select name="channel" id="channel">
-  <option value="http://berlin.starfm.de/player/pls/berlin_pls_mp3.php">Star FM</option>
-  <option value="http://mp3channels.webradio.rockantenne.de/alternative">Rock Antenne</option>
-  <option value="http://stream.berliner-rundfunk.de/brf/mp3-128/internetradio">BRF 91.4</option>
-  <option value="http://www.radioberlin.de/live.m3u">Radio Berlin 88.8</option>
-	<option value="http://www.radioeins.de/live.m3u">Radioeins</option>
+  <option value="StarFM">Playlist: Star FM</option>
+  <option value="http://mp3channels.webradio.rockantenne.de/alternative">Stream: Rock Antenne</option>
+  <option value="http://stream.berliner-rundfunk.de/brf/mp3-128/internetradio">Stream: BRF 91.4</option>
+  <option value="radio888">Playlist: RadioBerlin 88.8</option>
+	<option value="radioeins">Playlist: radioeins</option>
 </select></td>
 <td class="tbltd"><a onclick="createAlarm()" href="#"><i class="fa fa-plus-square"></i></a></td>
 </tr>
 </table>
 	</p>
-
 	<script src="https://ajax.googleapis.com/ajax/libs/jquery/1/jquery.min.js"></script>
 	<script src="https://netdna.bootstrapcdn.com/bootstrap/3.1.1/js/bootstrap.min.js"></script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/timepicker/1.3.5/jquery.timepicker.min.js"></script>
@@ -131,7 +150,7 @@ var IndexHtml = `<!DOCTYPE html>
 	$(document).ready(function(){
 	$('input.timepicker').timepicker({
     timeFormat: 'HH:mm',
-    interval: 30,
+    interval: 15,
     minTime: '00',
     maxTime: '23',
     defaultTime: '07',

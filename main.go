@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"regexp"
 	"strconv"
 	"time"
 
@@ -83,6 +84,15 @@ func playRaumfeldStream(alarm *Alarm) error {
 	return err
 }
 
+func playRaumfeldPlaylist(alarm *Alarm) error {
+	params := map[string]string{
+		"id":    alarm.AlarmZone,
+		"value": alarm.RadioChannel,
+	}
+	err := raumfeldAction(alarm.RaumserverUri, "/controller/loadPlaylist", params)
+	return err
+}
+
 func adjustRaumfeldVolume(alarm *Alarm, volume int) error {
 	params := map[string]string{
 		"id":    alarm.AlarmZone,
@@ -101,11 +111,39 @@ func stopRaumfeldStream(alarm *Alarm) error {
 	return err
 }
 
+func leaveStandby(alarm *Alarm) error {
+	params := map[string]string{
+		"id": alarm.AlarmZone,
+	}
+	err := raumfeldAction(alarm.RaumserverUri, "/controller/leaveStandby", params)
+	return err
+}
+
+func enterStandby(alarm *Alarm) error {
+	params := map[string]string{
+		"id": alarm.AlarmZone,
+	}
+	err := raumfeldAction(alarm.RaumserverUri, "/controller/enterManualStandby", params)
+	return err
+}
+
+func isStream(s string) bool {
+	validStream := regexp.MustCompile(`^https?://`)
+	return validStream.MatchString(s)
+}
+
 func executeAlarm(alarm *Alarm) {
 	// play stream for wake up
-	err := adjustRaumfeldVolume(alarm, alarm.VolumeStart)
+	err := leaveStandby(alarm)
 	Log(err)
-	err = playRaumfeldStream(alarm)
+	time.Sleep(10 * time.Second)
+	err = adjustRaumfeldVolume(alarm, alarm.VolumeStart)
+	Log(err)
+	if isStream(alarm.RadioChannel) {
+		err = playRaumfeldStream(alarm)
+	} else {
+		err = playRaumfeldPlaylist(alarm)
+	}
 	Log(err)
 	// inc volume over time
 	steps := alarm.VolumeEnd - alarm.VolumeStart
@@ -121,6 +159,8 @@ func executeAlarm(alarm *Alarm) {
 	err = adjustRaumfeldVolume(alarm, alarm.VolumeStart)
 	Log(err)
 	err = stopRaumfeldStream(alarm)
+	Log(err)
+	err = enterStandby(alarm)
 	Log(err)
 	AlarmActive = false
 }
@@ -139,19 +179,23 @@ func pollAlarm() {
 
 		t := time.Now()
 
-		weekDays, weekEnds := true, true
+		search := bson.M{}
 		switch int(t.Weekday()) {
 		case 0, 6:
-			weekDays, weekEnds = false, true
+			search = bson.M{
+				"enable":     "true",
+				"hourMinute": fmt.Sprintf("%02d:%02d", t.Hour(), t.Minute()),
+				"weekEnds":   strconv.FormatBool(true),
+			}
 		case 1, 2, 3, 4, 5:
-			weekDays, weekEnds = true, false
+			search = bson.M{
+				"enable":     "true",
+				"hourMinute": fmt.Sprintf("%02d:%02d", t.Hour(), t.Minute()),
+				"weekDays":   strconv.FormatBool(true),
+			}
 		}
 
-		err := c.Find(bson.M{
-			"hourMinute": fmt.Sprintf("%02d:%02d", t.Hour(), t.Minute()),
-			"weekDays":   strconv.FormatBool(weekDays),
-			"weekEnds":   strconv.FormatBool(weekEnds),
-		}).One(&result)
+		err := c.Find(search).One(&result)
 		if err == mgo.ErrNotFound || err != nil {
 			if Debug {
 				fmt.Println(err.Error())
@@ -192,7 +236,7 @@ func ensureIndices() {
 	c := Database.C("alarm").With(Database.Session.Copy())
 
 	index := mgo.Index{
-		Key:        []string{"hourMinute", "weekDays", "weekEnds"},
+		Key:        []string{"enable", "hourMinute", "weekDays", "weekEnds"},
 		Unique:     true,
 		DropDups:   true,
 		Background: true,
