@@ -46,9 +46,9 @@ var (
 	CheckInterval  = 5
 	Database       *mgo.Database
 	// defaults for raumserver connection. should be overridden by every specific alarm
-	RaumserverUri = "http://qnap:3535/raumserver"
-	ZoneId        = "uuid:C43C1A1D-AED1-472B-B0D0-210B7925000E"
-	RadioChannel  = "http://mp3channels.webradio.rockantenne.de/alternative"
+	RaumserverUri = GetEnvVar("RAUMSERVER_URI", "http://qnap:3535/raumserver")
+	ZoneId        = GetEnvVar("RAUMSERVER_ZONE", "uuid:C43C1A1D-AED1-472B-B0D0-210B7925000E")
+	RadioChannel  = GetEnvVar("RADIO_CHANNEL", "http://mp3channels.webradio.rockantenne.de/alternative")
 	AlarmActive   = false
 	NetClient     = &http.Client{Timeout: time.Second * 10}
 )
