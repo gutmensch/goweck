@@ -32,6 +32,8 @@ Environment=MONGODB_DATABASE=goweck
 Environment=MONGODB_DROP=false
 Environment=RAUMSERVER_URI=http://127.0.0.1:3535/raumserver
 Environment=RAUMSERVER_ZONE=uuid:C43C1A1D-AED1-472B-B0D0-210B7925000E
+Environment=PUSHOVER_APP_TOKEN=foobar
+Environment=PUSHOVER_USER_TOKEN=barfoo
 Environment=RADIO_CHANNEL=http://mp3channels.webradio.rockantenne.de/alternative
 Environment=DEBUG=false
 Environment=RAUMSERVER_DEBUG=false

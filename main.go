@@ -204,7 +204,7 @@ func executeAlarm(alarm *Alarm) {
 			}
 			Log(err)
 		}
-		if err_count >= 3 || err_count == 0 {
+		if err_count >= 3 {
 			// fallback: send pushover notification to wake up the guy
 			err = sendFallbackMessage()
 			Log(err)
