@@ -13,6 +13,7 @@ import (
 	"github.com/globalsign/mgo"
 	"github.com/globalsign/mgo/bson"
 	"github.com/gorilla/mux"
+	"github.com/gregdel/pushover"
 	"github.com/imdario/mergo"
 
 	. "github.com/gutmensch/goweck/appbase"
@@ -35,6 +36,17 @@ type Alarm struct {
 	Timeout       int           `bson:"timeout,omitempty"       json:"timeout,omitempty"`
 }
 
+type RendererState struct {
+	Action string `json:"action,omitempty`
+	Data   []struct {
+		Uri    string `json:"AVTransportURI,omitempty"`
+		State  string `json:"TransportState,omitempty"`
+		Status string `json:"TransportStatus,omitempty"`
+	} `json:"data,omitempty"`
+	Error   bool   `json:"error,omitempty`
+	Message string `json:"msg,omitempty"`
+}
+
 var (
 	Debug, _           = strconv.ParseBool(GetEnvVar("DEBUG", "false"))
 	RaumserverDebug, _ = strconv.ParseBool(GetEnvVar("RAUMSERVER_DEBUG", "false"))
@@ -50,14 +62,16 @@ var (
 	ZoneId        = GetEnvVar("RAUMSERVER_ZONE", "uuid:C43C1A1D-AED1-472B-B0D0-210B7925000E")
 	RadioChannel  = GetEnvVar("RADIO_CHANNEL", "http://mp3channels.webradio.rockantenne.de/alternative")
 	TimeZone      = GetEnvVar("TZ", "UTC")
+	PushOverUser  = GetEnvVar("PUSHOVER_USER_TOKEN", "undefined")
+	PushOverApp   = GetEnvVar("PUSHOVER_APP_TOKEN", "undefined")
 	AlarmActive   = false
 	NetClient     = &http.Client{Timeout: time.Second * 10}
 )
 
-func raumfeldAction(raumfeld string, uri string, params map[string]string) error {
+func raumfeldAction(raumfeld string, uri string, params map[string]string) ([]byte, error) {
 	req, err := http.NewRequest("GET", fmt.Sprintf("%s%s", raumfeld, uri), nil)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	q := req.URL.Query()
@@ -72,8 +86,8 @@ func raumfeldAction(raumfeld string, uri string, params map[string]string) error
 	if RaumserverDebug {
 		fmt.Println(resp)
 	}
-
-	return err
+	respData, _ := ioutil.ReadAll(resp.Body)
+	return respData, err
 }
 
 func playRaumfeldStream(alarm *Alarm) error {
@@ -81,7 +95,7 @@ func playRaumfeldStream(alarm *Alarm) error {
 		"id":    alarm.AlarmZone,
 		"value": alarm.RadioChannel,
 	}
-	err := raumfeldAction(alarm.RaumserverUri, "/controller/loadUri", params)
+	_, err := raumfeldAction(alarm.RaumserverUri, "/controller/loadUri", params)
 	return err
 }
 
@@ -90,7 +104,7 @@ func playRaumfeldPlaylist(alarm *Alarm) error {
 		"id":    alarm.AlarmZone,
 		"value": alarm.RadioChannel,
 	}
-	err := raumfeldAction(alarm.RaumserverUri, "/controller/loadPlaylist", params)
+	_, err := raumfeldAction(alarm.RaumserverUri, "/controller/loadPlaylist", params)
 	return err
 }
 
@@ -100,7 +114,7 @@ func adjustRaumfeldVolume(alarm *Alarm, volume int) error {
 		"scope": "zone",
 		"value": fmt.Sprint(volume),
 	}
-	err := raumfeldAction(alarm.RaumserverUri, "/controller/setVolume", params)
+	_, err := raumfeldAction(alarm.RaumserverUri, "/controller/setVolume", params)
 	return err
 }
 
@@ -108,7 +122,7 @@ func stopRaumfeldStream(alarm *Alarm) error {
 	params := map[string]string{
 		"id": alarm.AlarmZone,
 	}
-	err := raumfeldAction(alarm.RaumserverUri, "/controller/stop", params)
+	_, err := raumfeldAction(alarm.RaumserverUri, "/controller/stop", params)
 	return err
 }
 
@@ -116,7 +130,7 @@ func leaveStandby(alarm *Alarm) error {
 	params := map[string]string{
 		"id": alarm.AlarmZone,
 	}
-	err := raumfeldAction(alarm.RaumserverUri, "/controller/leaveStandby", params)
+	_, err := raumfeldAction(alarm.RaumserverUri, "/controller/leaveStandby", params)
 	return err
 }
 
@@ -124,13 +138,43 @@ func enterStandby(alarm *Alarm) error {
 	params := map[string]string{
 		"id": alarm.AlarmZone,
 	}
-	err := raumfeldAction(alarm.RaumserverUri, "/controller/enterManualStandby", params)
+	_, err := raumfeldAction(alarm.RaumserverUri, "/controller/enterManualStandby", params)
 	return err
+}
+
+func checkTransportState(alarm *Alarm) (bool, error) {
+	params := map[string]string{
+		"id": alarm.AlarmZone,
+	}
+	var rendererState RendererState
+	data, err := raumfeldAction(alarm.RaumserverUri, "/data/getRendererState", params)
+	err = json.Unmarshal(data, &rendererState)
+	if Debug {
+		if err != nil {
+			fmt.Println(err.Error())
+		}
+		fmt.Println(rendererState)
+	}
+	if rendererState.Data[0].State != "PLAYING" {
+		return false, err
+	}
+	return true, err
 }
 
 func isStream(s string) bool {
 	validStream := regexp.MustCompile(`^https?://`)
 	return validStream.MatchString(s)
+}
+
+func sendFallbackMessage() error {
+	app := pushover.New(PushOverApp)
+	recipient := pushover.NewRecipient(PushOverUser)
+	message := pushover.NewMessageWithTitle("Wake up please!", "GoWeck")
+	response, err := app.SendMessage(message, recipient)
+	if Debug {
+		fmt.Println(response)
+	}
+	return err
 }
 
 func executeAlarm(alarm *Alarm) {
@@ -148,8 +192,27 @@ func executeAlarm(alarm *Alarm) {
 	Log(err)
 	// inc volume over time
 	steps := alarm.VolumeEnd - alarm.VolumeStart
+	err_count := 0
 	for i := 1; i <= steps; i++ {
-		fmt.Println("adjusting volume to", alarm.VolumeStart+i)
+		running, _ := checkTransportState(alarm)
+		if (i%5) == 0 && !running {
+			err_count += 1
+			if isStream(alarm.RadioChannel) {
+				err = playRaumfeldStream(alarm)
+			} else {
+				err = playRaumfeldPlaylist(alarm)
+			}
+			Log(err)
+		}
+		if err_count >= 3 || err_count == 0 {
+			// fallback: send pushover notification to wake up the guy
+			err = sendFallbackMessage()
+			Log(err)
+			err_count = 0
+		}
+		if Debug {
+			fmt.Println("adjusting volume to", alarm.VolumeStart+i)
+		}
 		err = adjustRaumfeldVolume(alarm, alarm.VolumeStart+i)
 		Log(err)
 		time.Sleep(time.Duration(alarm.VolumeIncInt) * time.Second)
@@ -345,7 +408,7 @@ func AlarmCreateHandler(w http.ResponseWriter, r *http.Request) {
 		RaumserverUri: RaumserverUri,
 		RadioChannel:  RadioChannel,
 		AlarmZone:     ZoneId,
-		VolumeStart:   15,
+		VolumeStart:   5,
 		VolumeEnd:     45,
 		VolumeIncStep: 1,
 		VolumeIncInt:  20,
