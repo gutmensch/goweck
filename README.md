@@ -38,7 +38,8 @@ Environment=RADIO_CHANNEL=http://mp3channels.webradio.rockantenne.de/alternative
 Environment=DEBUG=false
 Environment=RAUMSERVER_DEBUG=false
 Environment=LISTEN=:8081
-
+Restart=always
+RestartSec=3
 ExecStart=/home/pi/go/bin/goweck
 
 [Install]

@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"regexp"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/globalsign/mgo"
@@ -27,7 +28,8 @@ type Alarm struct {
 	WeekDays      string        `bson:"weekDays,omitempty"      json:"weekDays,omitempty"`
 	WeekEnds      string        `bson:"weekEnds,omitempty"      json:"weekEnds,omitempty"`
 	RaumserverUri string        `bson:"raumserverUri,omitempty" json:"raumserverUri,omitempty"`
-	AlarmZone     string        `bson:"alarmZone,omitempty"     json:"alarmZone,omitempty"`
+	ZoneUuid      string        `bson:"zoneUuid,omitempty"      json:"zoneUuid,omitempty"`
+	ZoneName      string        `bson:"zoneName,omitempty"      json:"zoneName,omitempty"`
 	RadioChannel  string        `bson:"radioChannel,omitempty"  json:"radioChannel,omitempty"`
 	VolumeStart   int           `bson:"volumeStart,omitempty"   json:"volumeStart,omitempty"`
 	VolumeEnd     int           `bson:"volumeEnd,omitempty"     json:"volumeEnd,omitempty"`
@@ -47,6 +49,36 @@ type RendererState struct {
 	Message string `json:"msg,omitempty"`
 }
 
+// this is madnessting for sure
+type ZoneData struct {
+	Action string `json:"action,omitempty`
+	Data   struct {
+		ZoneConfig struct {
+			Zones []struct {
+				Zone []struct {
+					Self struct {
+						Udn string `json:"udn,omitempty"`
+					} `json:"$,omitempty"`
+					Room []struct {
+						Self struct {
+							Name       string `json:"name,omitempty"`
+							PowerState string `json:"powerState,omitempty"`
+							Udn        string `json:"udn,omitempty"`
+						} `json:"$,omitempty"`
+					} `json:"room,omitempty"`
+				} `json:"zone,omitempty"`
+			} `json:"zones,omitempty"`
+		} `json:"zoneConfig,omitempty"`
+	} `json:"data,omitempty"`
+	Error   bool   `json:"error,omitempty`
+	Message string `json:"msg,omitempty"`
+}
+
+type SimpleZone struct {
+	Udn  string `json:"udn,omitempty"`
+	Name string `json:"name,omitempty"`
+}
+
 var (
 	Debug, _           = strconv.ParseBool(GetEnvVar("DEBUG", "false"))
 	RaumserverDebug, _ = strconv.ParseBool(GetEnvVar("RAUMSERVER_DEBUG", "false"))
@@ -59,7 +91,6 @@ var (
 	Database       *mgo.Database
 	// defaults for raumserver connection. should be overridden by every specific alarm
 	RaumserverUri = GetEnvVar("RAUMSERVER_URI", "http://qnap:3535/raumserver")
-	ZoneId        = GetEnvVar("RAUMSERVER_ZONE", "uuid:C43C1A1D-AED1-472B-B0D0-210B7925000E")
 	RadioChannel  = GetEnvVar("RADIO_CHANNEL", "http://mp3channels.webradio.rockantenne.de/alternative")
 	TimeZone      = GetEnvVar("TZ", "UTC")
 	PushOverUser  = GetEnvVar("PUSHOVER_USER_TOKEN", "undefined")
@@ -92,7 +123,7 @@ func raumfeldAction(raumfeld string, uri string, params map[string]string) ([]by
 
 func playRaumfeldStream(alarm *Alarm) error {
 	params := map[string]string{
-		"id":    alarm.AlarmZone,
+		"id":    alarm.ZoneUuid,
 		"value": alarm.RadioChannel,
 	}
 	_, err := raumfeldAction(alarm.RaumserverUri, "/controller/loadUri", params)
@@ -101,7 +132,7 @@ func playRaumfeldStream(alarm *Alarm) error {
 
 func playRaumfeldPlaylist(alarm *Alarm) error {
 	params := map[string]string{
-		"id":    alarm.AlarmZone,
+		"id":    alarm.ZoneUuid,
 		"value": alarm.RadioChannel,
 	}
 	_, err := raumfeldAction(alarm.RaumserverUri, "/controller/loadPlaylist", params)
@@ -110,7 +141,7 @@ func playRaumfeldPlaylist(alarm *Alarm) error {
 
 func adjustRaumfeldVolume(alarm *Alarm, volume int) error {
 	params := map[string]string{
-		"id":    alarm.AlarmZone,
+		"id":    alarm.ZoneUuid,
 		"scope": "zone",
 		"value": fmt.Sprint(volume),
 	}
@@ -120,7 +151,7 @@ func adjustRaumfeldVolume(alarm *Alarm, volume int) error {
 
 func stopRaumfeldStream(alarm *Alarm) error {
 	params := map[string]string{
-		"id": alarm.AlarmZone,
+		"id": alarm.ZoneUuid,
 	}
 	_, err := raumfeldAction(alarm.RaumserverUri, "/controller/stop", params)
 	return err
@@ -128,7 +159,7 @@ func stopRaumfeldStream(alarm *Alarm) error {
 
 func leaveStandby(alarm *Alarm) error {
 	params := map[string]string{
-		"id": alarm.AlarmZone,
+		"id": alarm.ZoneUuid,
 	}
 	_, err := raumfeldAction(alarm.RaumserverUri, "/controller/leaveStandby", params)
 	return err
@@ -136,7 +167,7 @@ func leaveStandby(alarm *Alarm) error {
 
 func enterStandby(alarm *Alarm) error {
 	params := map[string]string{
-		"id": alarm.AlarmZone,
+		"id": alarm.ZoneUuid,
 	}
 	_, err := raumfeldAction(alarm.RaumserverUri, "/controller/enterManualStandby", params)
 	return err
@@ -144,7 +175,7 @@ func enterStandby(alarm *Alarm) error {
 
 func checkTransportState(alarm *Alarm) (bool, error) {
 	params := map[string]string{
-		"id": alarm.AlarmZone,
+		"id": alarm.ZoneUuid,
 	}
 	var rendererState RendererState
 	data, err := raumfeldAction(alarm.RaumserverUri, "/data/getRendererState", params)
@@ -159,6 +190,38 @@ func checkTransportState(alarm *Alarm) (bool, error) {
 		return false, err
 	}
 	return true, err
+}
+
+func getZones() (ZoneData, error) {
+	params := map[string]string{}
+	var zoneData ZoneData
+	data, err := raumfeldAction(RaumserverUri, "/data/getZoneConfig", params)
+	err = json.Unmarshal(data, &zoneData)
+	if Debug {
+		if err != nil {
+			fmt.Println(err.Error())
+		}
+		fmt.Println(zoneData)
+	}
+	return zoneData, err
+}
+
+func getZoneName(uuid string) string {
+	zoneName := "unknown"
+	var friendlyName []string
+	zoneData, _ := getZones()
+	for _, zones := range zoneData.Data.ZoneConfig.Zones {
+		for _, realZone := range zones.Zone {
+			friendlyName = []string{}
+			for _, room := range realZone.Room {
+				friendlyName = append(friendlyName, room.Self.Name)
+			}
+			if realZone.Self.Udn == uuid {
+				zoneName = strings.Join(friendlyName, ", ")
+			}
+		}
+	}
+	return zoneName
 }
 
 func isStream(s string) bool {
@@ -315,6 +378,7 @@ func ensureIndices() {
 func httpRouter() *mux.Router {
 	r := mux.NewRouter()
 	r.HandleFunc("/alarms", http.HandlerFunc(AlarmListHandler)).Methods("GET")
+	r.HandleFunc("/zones", http.HandlerFunc(ZoneListHandler)).Methods("GET")
 	r.HandleFunc("/alarm", http.HandlerFunc(AlarmCreateHandler)).Methods("POST")
 	r.HandleFunc("/alarm/{id:[0-9a-f]{24}}", http.HandlerFunc(AlarmUpdateHandler)).Methods("POST")
 	r.HandleFunc("/alarm/{id:[0-9a-f]{24}}", http.HandlerFunc(AlarmDeleteHandler)).Methods("DELETE")
@@ -335,6 +399,29 @@ func AlarmListHandler(w http.ResponseWriter, r *http.Request) {
 	e, err := json.Marshal(results)
 	Log(err)
 	w.WriteHeader(http.StatusOK)
+	fmt.Fprintf(w, "%q\n", string(e))
+}
+
+func ZoneListHandler(w http.ResponseWriter, r *http.Request) {
+	var zones ZoneData
+	var nz []SimpleZone
+	var z SimpleZone
+	var friendlyName []string
+	zones, err := getZones()
+	Log(err)
+	for _, zone := range zones.Data.ZoneConfig.Zones {
+		for _, realZone := range zone.Zone {
+			friendlyName = []string{}
+			z.Udn = realZone.Self.Udn
+			for _, room := range realZone.Room {
+				friendlyName = append(friendlyName, room.Self.Name)
+			}
+			z.Name = strings.Join(friendlyName, ", ")
+			nz = append(nz, z)
+		}
+	}
+	e, err := json.Marshal(nz)
+	Log(err)
 	fmt.Fprintf(w, "%q\n", string(e))
 }
 
@@ -407,12 +494,13 @@ func AlarmCreateHandler(w http.ResponseWriter, r *http.Request) {
 		WeekEnds:      strconv.FormatBool(false),
 		RaumserverUri: RaumserverUri,
 		RadioChannel:  RadioChannel,
-		AlarmZone:     ZoneId,
+		ZoneUuid:      "",
+		ZoneName:      getZoneName(new.ZoneUuid),
 		VolumeStart:   5,
 		VolumeEnd:     45,
 		VolumeIncStep: 1,
 		VolumeIncInt:  20,
-		Timeout:       3600,
+		Timeout:       7200,
 	}
 	err = mergo.Merge(&new, def)
 	if err != nil {

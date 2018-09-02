@@ -34,13 +34,13 @@ var IndexHtml = `<!DOCTYPE html>
 		var t = document.getElementById('currentAlarms');
 		t.innerHTML = "";
 		var tr_head = t.insertRow();
-		var captions = ['Enabled', 'Time', 'WeekDays', 'Weekend', 'Stream', 'Delete'];
+		var captions = ['Enabled', 'Time', 'WeekDays', 'Weekend', 'Stream', 'Zone', 'Delete'];
 		captions.forEach(function(h) {
 			td = tr_head.insertCell();
 			td.className = 'tblth';
 			td.appendChild(document.createTextNode(h));
 		});
-		var docVal = ['enable', 'hourMinute', 'weekDays', 'weekEnds', 'radioChannel'];
+		var docVal = ['enable', 'hourMinute', 'weekDays', 'weekEnds', 'radioChannel', 'zoneName'];
 		$.getJSON("/alarms", function(data) {
 			if (data !== "null") {
 				JSON.parse(data).forEach(function(alarm) {
@@ -68,6 +68,20 @@ var IndexHtml = `<!DOCTYPE html>
 		  }
 		});
 	}
+	function populateZoneSelect() {
+		var t = document.getElementById('zoneSelect');
+		t.innerHTML = "";
+		$.getJSON("/zones", function(data) {
+			if (data !== "null") {
+				JSON.parse(data).forEach(function(zone) {
+					var s = document.createElement("option");
+					s.text = zone.name;
+					s.value = zone.udn;
+					t.add(s);
+				});
+		  }
+		});
+	}
 	function toggleAlarm(id, curr) {
 		var alarmUpdate = {
 			enable: (curr ? false : true).toString(),
@@ -90,6 +104,7 @@ var IndexHtml = `<!DOCTYPE html>
 			hourMinute: document.getElementById('timepicker').value,
 			weekDays: document.getElementById('weekDaysEnabled').checked.toString(),
 			weekEnds: document.getElementById('weekEndsEnabled').checked.toString(),
+			zoneUuid: document.getElementById('zoneSelect').value,
       radioChannel: document.getElementById('channel').value
 		};
 		$.ajax({
@@ -116,7 +131,7 @@ var IndexHtml = `<!DOCTYPE html>
 	</script>
 </head>
 
-<body onload="getAlarms()">
+<body onload="getAlarms();populateZoneSelect()">
 	<p class="lead text-center">
 		Current alarms
 		<table align="center" class="currentAlarms" id="currentAlarms">
@@ -126,7 +141,7 @@ var IndexHtml = `<!DOCTYPE html>
 	<p class="lead text-center">
 		Create new alarm
 		<table class="currentAlarms" align="center">
-			<tr><td class="tblth">Enable</td><td class="tblth">Time</td><td class="tblth">WeekDays</td><td class="tblth">Weekend</td><td class="tblth">Stream</td><td class="tblth">Add</td></tr>
+			<tr><td class="tblth">Enable</td><td class="tblth">Time</td><td class="tblth">WeekDays</td><td class="tblth">Weekend</td><td class="tblth">Stream</td><td class="tblth">Zone</td><td class="tblth">Add</td></tr>
 			<tr>
 	<td class="tbltd"><input type="checkbox" class="checkbox center" id="alarmEnabled" /></td>
 	<td class="tbltd"><input id="timepicker" class="timepicker text-center" jt-timepicker time="model.time" time-string="model.timeString" default-time="model.options.defaultTime" time-format="model.options.timeFormat" start-time="model.options.startTime" min-time="model.options.minTime" max-time="model.options.maxTime" interval="model.options.interval" dynamic="model.options.dynamic" scrollbar="model.options.scrollbar" dropdown="model.options.dropdown" /></td>
@@ -138,6 +153,8 @@ var IndexHtml = `<!DOCTYPE html>
   <option value="http://stream.berliner-rundfunk.de/brf/mp3-128/internetradio">Stream: BRF 91.4</option>
   <option value="radio888">Playlist: RadioBerlin 88.8</option>
 	<option value="radioeins">Playlist: radioeins</option>
+</select></td>
+<td class="tbltd"><select name="zoneSelect" id="zoneSelect">
 </select></td>
 <td class="tbltd"><a onclick="createAlarm()" href="#"><i class="fa fa-plus-square"></i></a></td>
 </tr>
