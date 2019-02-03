@@ -6,6 +6,7 @@ var IndexHtml = `<!DOCTYPE html>
 <head>
 	<title>GoWeck - Alarm Clock for Raumserver</title>
 	<meta charset="utf-8"  />
+	<meta name="viewport" content="width=device-width,initial-scale=1" />
 	<link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/timepicker/1.3.5/jquery.timepicker.css" />
 	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css" />
@@ -79,10 +80,10 @@ var IndexHtml = `<!DOCTYPE html>
 		  box-sizing: border-box;
 		  min-height: 100%;
 		  margin: 0 auto;
-		  padding: 2em;
-		  max-width: 800px;
+		  padding: 1.2em;
+		  max-width: 1000px;
 		  font-family: 'Josefin Sans', sans-serif;
-		  font-size: 1.2em;
+		  font-size: 2em;
 		  background-color: white;
 		  border: double 3px #DDD;
 		  border-top: none;
@@ -205,6 +206,7 @@ var IndexHtml = `<!DOCTYPE html>
 	</style>
 	<script type="text/javascript">
 	function getAlarms() {
+		var h = document.getElementById('configuredAlarmsHeading');
 		var t = document.getElementById('currentAlarms');
 		t.innerHTML = "";
 		$.getJSON("/alarm/all", function(data) {
@@ -380,23 +382,26 @@ var IndexHtml = `<!DOCTYPE html>
 		</div>
 	</div>
 
-	<script src="https://ajax.googleapis.com/ajax/libs/jquery/1/jquery.min.js"></script>
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/2.1.1/jquery.min.js"></script>
 	<script src="https://netdna.bootstrapcdn.com/bootstrap/3.1.1/js/bootstrap.min.js"></script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/timepicker/1.3.5/jquery.timepicker.min.js"></script>
   <script>
 	$(document).ready(function(){
-	$('input.timepicker').timepicker({
-    timeFormat: 'HH:mm',
-    interval: 15,
-    minTime: '00',
-    maxTime: '23',
-    defaultTime: '07',
-    startTime: '04',
-    dynamic: false,
-    dropdown: true,
-    scrollbar: true
-});
-});
+		$('input.timepicker').timepicker({
+    	timeFormat: 'HH:mm',
+    	interval: 15,
+    	minTime: '00',
+    	maxTime: '23',
+    	defaultTime: '07',
+    	startTime: '04',
+    	dynamic: false,
+    	dropdown: true,
+    	scrollbar: true
+		});
+		$('input, select, textarea').on('focus blur', function(event) {
+    	$('meta[name=viewport]').attr('content', 'width=device-width,initial-scale=1,maximum-scale=' + (event.type == 'blur' ? 10 : 1));
+  	});
+	});
 	</script>
 
 </body>
