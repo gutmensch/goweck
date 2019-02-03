@@ -8,70 +8,255 @@ var IndexHtml = `<!DOCTYPE html>
 	<meta charset="utf-8"  />
 	<link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css" />
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/timepicker/1.3.5/jquery.timepicker.css" />
-	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+	<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css" />
+	<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/modernizr/2.8.3/modernizr.min.js"></script>
+
 	<style type="text/css">
-  table.currentAlarms {
-		border-collapse: collapse;
-	}
-	td.tblth {
-		font-weight: bold;
-		text-align: center;
-    padding: 3px;
-		border: 1px solid black;
-	}
-	td.tbltd {
-		text-align: center;
-		padding: 2px;
-		border: 1px solid black;
-	}
-	input.center {
-		display: block;
-		margin : 0 auto;
-	}
+		/* Variables
+		================================== */
+		/* Tables
+		================================== */
+		.Rtable {
+		  display: flex;
+		  flex-wrap: wrap;
+		  margin: 0 0 3em 0;
+		  padding: 0;
+		}
+		.Rtable-cell {
+		  box-sizing: border-box;
+		  flex-grow: 1;
+		  width: 100%;
+		  padding: 0.8em 1.2em;
+		  overflow: hidden;
+		  list-style: none;
+		  border: solid 3px white;
+		  background: rgba(112, 128, 144, 0.2);
+		}
+		.Rtable-cell > h1,
+		.Rtable-cell > h2,
+		.Rtable-cell > h3,
+		.Rtable-cell > h4,
+		.Rtable-cell > h5,
+		.Rtable-cell > h6 {
+		  margin: 0;
+		}
+		/* Table column sizing
+		================================== */
+		.Rtable--2cols > .Rtable-cell {
+		  width: 50%;
+		}
+		.Rtable--3cols > .Rtable-cell {
+		  width: 33.33%;
+		}
+		.Rtable--4cols > .Rtable-cell {
+		  width: 25%;
+		}
+		.Rtable--5cols > .Rtable-cell {
+		  width: 20%;
+		}
+		.Rtable--6cols > .Rtable-cell {
+		  width: 16.6%;
+		}
+		/* Page styling
+		================================== */
+		@font-face {
+		  font-family: 'Josefin Sans';
+		  font-style: normal;
+		  font-weight: 400;
+		  src: local('Josefin Sans Regular'), local('JosefinSans-Regular'), url(https://fonts.gstatic.com/s/josefinsans/v12/Qw3aZQNVED7rKGKxtqIqX5EUDXx9.ttf) format('truetype');
+		}
+		@font-face {
+		  font-family: 'Josefin Sans';
+		  font-style: normal;
+		  font-weight: 700;
+		  src: local('Josefin Sans Bold'), local('JosefinSans-Bold'), url(https://fonts.gstatic.com/s/josefinsans/v12/Qw3FZQNVED7rKGKxtqIqX5Ectllte10k.ttf) format('truetype');
+		}
+		html {
+		  height: 100%;
+		  background-color: #EEE;
+		}
+		body {
+		  box-sizing: border-box;
+		  min-height: 100%;
+		  margin: 0 auto;
+		  padding: 2em;
+		  max-width: 800px;
+		  font-family: 'Josefin Sans', sans-serif;
+		  font-size: 1.2em;
+		  background-color: white;
+		  border: double 3px #DDD;
+		  border-top: none;
+		  border-bottom: none;
+		}
+		h1,
+		h2,
+		h3,
+		h4,
+		h5,
+		h6 {
+		  margin-top: 0;
+		}
+		h3 {
+		  font-size: 1.2em;
+		}
+		h4 {
+		  font-size: 1em;
+		}
+		strong {
+		  color: #434d57;
+		}
+		/* Apply styles
+		================================== */
+		.Rtable {
+		  position: relative;
+		  top: 3px;
+		  left: 3px;
+		}
+		.Rtable-cell {
+		  margin: -3px 0 0 -3px;
+		  background-color: white;
+		  border-color: #e2e6e9;
+		}
+		/* Cell styles
+		================================== */
+		.Rtable-cell--dark {
+		  background-color: slategrey;
+		  border-color: #5a6673;
+		  color: white;
+		}
+		.Rtable-cell--dark > h1,
+		.Rtable-cell--dark > h2,
+		.Rtable-cell--dark > h3,
+		.Rtable-cell--dark > h4,
+		.Rtable-cell--dark > h5,
+		.Rtable-cell--dark > h6 {
+		  color: white;
+		}
+		.Rtable-cell--medium {
+		  background-color: #b8c0c8;
+		  border-color: #a9b3bc;
+		}
+		.Rtable-cell--light {
+		  background-color: white;
+		  border-color: #e2e6e9;
+		}
+		.Rtable-cell--highlight {
+		  background-color: lightgreen;
+		  border-color: #64e764;
+		}
+		.Rtable-cell--alert {
+		  background-color: darkorange;
+		  border-color: #cc7000;
+		  color: white;
+		}
+		.Rtable-cell--alert > h1,
+		.Rtable-cell--alert > h2,
+		.Rtable-cell--alert > h3,
+		.Rtable-cell--alert > h4,
+		.Rtable-cell--alert > h5,
+		.Rtable-cell--alert > h6 {
+		  color: white;
+		}
+		.Rtable-cell--head {
+		  background-color: slategrey;
+		  border-color: #5a6673;
+		  color: white;
+		}
+		.Rtable-cell--head > h1,
+		.Rtable-cell--head > h2,
+		.Rtable-cell--head > h3,
+		.Rtable-cell--head > h4,
+		.Rtable-cell--head > h5,
+		.Rtable-cell--head > h6 {
+		  color: white;
+		}
+		.Rtable-cell--foot {
+		  background-color: #b8c0c8;
+		  border-color: #a9b3bc;
+		}
+		/* Responsive
+		==================================== */
+		@media all and (max-width: 500px) {
+		  .Rtable--collapse {
+		    display: block;
+		  }
+		  .Rtable--collapse > .Rtable-cell {
+		    width: 100% !important;
+		  }
+		  .Rtable--collapse > .Rtable-cell--foot {
+		    margin-bottom: 1em;
+		  }
+		}
+		.no-flexbox .Rtable {
+		  display: block;
+		}
+		.no-flexbox .Rtable > .Rtable-cell {
+		  width: 100%;
+		}
+		.no-flexbox .Rtable > .Rtable-cell--foot {
+		  margin-bottom: 1em;
+		}
+		.bgfix {
+			background-color: slategrey;
+		}
+		.widthfix {
+			width: 100%;
+		}
 	</style>
 	<script type="text/javascript">
 	function getAlarms() {
 		var t = document.getElementById('currentAlarms');
 		t.innerHTML = "";
-		var tr_head = t.insertRow();
-		var captions = ['Enabled', 'Time', 'WeekDays', 'Weekend', 'Stream', 'Zone', 'Delete'];
-		captions.forEach(function(h) {
-			td = tr_head.insertCell();
-			td.className = 'tblth';
-			td.appendChild(document.createTextNode(h));
-		});
-		var docVal = ['enable', 'hourMinute', 'weekDays', 'weekEnds', 'radioChannel', 'zoneName'];
-		$.getJSON("/alarms", function(data) {
+		$.getJSON("/alarm/all", function(data) {
 			if (data !== "null") {
 				JSON.parse(data).forEach(function(alarm) {
-					var tr_alarm = t.insertRow();
-					docVal.forEach(function(k){
-						if (k === 'enable') {
-							toggle = document.createElement('a');
-							toggle.setAttribute('onclick', 'toggleAlarm("'+alarm['_id']+'",'+alarm[k]+')');
-							toggle.setAttribute('href', '#');
-							td = tr_alarm.insertCell();
-							td.className = 'tbltd';
-							td.appendChild(toggle);
-							toggle.appendChild(document.createTextNode(alarm[k]));
-						} else {
-							td = tr_alarm.insertCell();
-							td.className = 'tbltd';
-							td.appendChild(document.createTextNode(alarm[k]));
-						}
-					});
-					var td_delete = document.createElement("td");
-					td_delete.className = "tbltd";
-					td_delete.innerHTML = "<a href=\"#\"><i onclick=\"deleteAlarm('"+alarm['_id']+"')\" class=\"fa fa-trash\"></i></a>";
-					tr_alarm.appendChild(td_delete);
+					var statusCol = document.createElement('div');
+          statusCol.className = "Rtable-cell Rtable-cell--head";
+					var statusButton = document.createElement('input');
+					statusButton.setAttribute('type', 'button');
+					statusButton.className = "widthfix bgfix";
+					statusButton.setAttribute('value', alarm.status);
+					var toggleStatus = (alarm.status === "active") ? "inactive" : "active";
+					statusButton.setAttribute('onclick', 'toggleAlarm("' + alarm['_id'] + '","' + toggleStatus + '")')
+					statusCol.appendChild(statusButton);
+
+					var timeCol = document.createElement('div');
+          timeCol.className = "Rtable-cell";
+					var heading = document.createElement('h3');
+					heading.innerHTML = alarm.hourMinute;
+					timeCol.appendChild(heading);
+
+					var timeframeCol = document.createElement('div');
+          timeframeCol.className = "Rtable-cell";
+					var timeframe = (alarm.weekDays === "true") ? "Mon-Fri" : "Sat-Sun";
+					timeframeCol.appendChild(document.createTextNode(timeframe));
+
+					var streamCol = document.createElement('div');
+          streamCol.className = "Rtable-cell";
+					streamCol.appendChild(document.createTextNode(alarm.streamName));
+
+					var deleteCol = document.createElement('div');
+          deleteCol.className = "Rtable-cell Rtable-cell--foot";
+					var deleteButton = document.createElement('input');
+					deleteButton.setAttribute('type', 'button');
+					deleteButton.className = "widthfix";
+					deleteButton.setAttribute('value', 'Delete');
+					deleteButton.setAttribute('onclick', 'deleteAlarm("' + alarm['_id'] + '")')
+					deleteCol.appendChild(deleteButton);
+
+					t.appendChild(statusCol);
+					t.appendChild(timeCol);
+					t.appendChild(timeframeCol);
+					t.appendChild(streamCol);
+					t.appendChild(deleteCol);
 				});
 		  }
 		});
 	}
 	function populateZoneSelect() {
-		var t = document.getElementById('zoneSelect');
+		var t = document.getElementById('raumfeldZoneSelect');
 		t.innerHTML = "";
-		$.getJSON("/zones", function(data) {
+		$.getJSON("/zone/all", function(data) {
 			if (data !== "null") {
 				JSON.parse(data).forEach(function(zone) {
 					var s = document.createElement("option");
@@ -82,12 +267,26 @@ var IndexHtml = `<!DOCTYPE html>
 		  }
 		});
 	}
+	function populateStreamSelect() {
+		var t = document.getElementById('streamSelect');
+		t.innerHTML = "";
+		$.getJSON("/stream/all", function(data) {
+			if (data !== "null") {
+				JSON.parse(data).forEach(function(stream) {
+					var s = document.createElement("option");
+					s.text = stream.Name;
+					s.value = stream.Name;
+					t.add(s);
+				});
+			}
+		});
+	}
 	function toggleAlarm(id, curr) {
 		var alarmUpdate = {
-			enable: (curr ? false : true).toString(),
+			status: curr,
 		};
 		$.ajax({
-			url: '/alarm/' + id,
+			url: '/alarm/update/' + id,
 			type: 'POST',
 			data: JSON.stringify(alarmUpdate),
 			contentType: 'application/json',
@@ -99,16 +298,19 @@ var IndexHtml = `<!DOCTYPE html>
 		});
 	}
 	function createAlarm() {
+		var weekDaysVal = (document.getElementById('timeframeSelect').value === "Mon-Fri") ? "true" : "false";
+		var weekEndsVal = (document.getElementById('timeframeSelect').value === "Sat-Sun") ? "true" : "false";
 		var newAlarm = {
-			enable: document.getElementById('alarmEnabled').checked.toString(),
+			status: 'active',
 			hourMinute: document.getElementById('timepicker').value,
-			weekDays: document.getElementById('weekDaysEnabled').checked.toString(),
-			weekEnds: document.getElementById('weekEndsEnabled').checked.toString(),
-			zoneUuid: document.getElementById('zoneSelect').value,
-      radioChannel: document.getElementById('channel').value
+			weekDays: weekDaysVal,
+			weekEnds: weekEndsVal,
+			zoneUuid: document.getElementById('raumfeldZoneSelect').value,
+      streamName: document.getElementById('streamSelect').value,
+			endVolume: document.getElementById('endVolumeSelect').value
 		};
 		$.ajax({
-			url: '/alarm',
+			url: '/alarm/create',
 			type: 'POST',
 			data: JSON.stringify(newAlarm),
 			contentType: 'application/json',
@@ -119,9 +321,18 @@ var IndexHtml = `<!DOCTYPE html>
 			}
 		});
 	}
+	function stopAlarm(id) {
+		$.ajax({
+			url: '/alarm/stop',
+			type: 'POST',
+			success: function(data) {
+				getAlarms();
+			}
+		});
+	}
 	function deleteAlarm(id) {
 		$.ajax({
-	    url: '/alarm/' + id,
+	    url: '/alarm/delete/' + id,
 	    type: 'DELETE',
 	    success: function(data) {
 				getAlarms();
@@ -131,35 +342,44 @@ var IndexHtml = `<!DOCTYPE html>
 	</script>
 </head>
 
-<body onload="getAlarms();populateZoneSelect()">
-	<p class="lead text-center">
-		Current alarms
-		<table align="center" class="currentAlarms" id="currentAlarms">
-    </table>
-	</p>
+<body onload="getAlarms();populateZoneSelect();populateStreamSelect()">
 
-	<p class="lead text-center">
-		Create new alarm
-		<table class="currentAlarms" align="center">
-			<tr><td class="tblth">Enable</td><td class="tblth">Time</td><td class="tblth">WeekDays</td><td class="tblth">Weekend</td><td class="tblth">Stream</td><td class="tblth">Zone</td><td class="tblth">Add</td></tr>
-			<tr>
-	<td class="tbltd"><input type="checkbox" class="checkbox center" id="alarmEnabled" /></td>
-	<td class="tbltd"><input id="timepicker" class="timepicker text-center" jt-timepicker time="model.time" time-string="model.timeString" default-time="model.options.defaultTime" time-format="model.options.timeFormat" start-time="model.options.startTime" min-time="model.options.minTime" max-time="model.options.maxTime" interval="model.options.interval" dynamic="model.options.dynamic" scrollbar="model.options.scrollbar" dropdown="model.options.dropdown" /></td>
-  <td class="tbltd"><input type="checkbox" class="checkbox center" id="weekDaysEnabled" /></td>
-	<td class="tbltd"><input type="checkbox" class="checkbox center" id="weekEndsEnabled" /></td>
-	<td class="tbltd"><select name="channel" id="channel">
-  <option value="StarFM">Playlist: Star FM</option>
-  <option value="http://mp3channels.webradio.rockantenne.de/alternative">Stream: Rock Antenne</option>
-  <option value="http://stream.berliner-rundfunk.de/brf/mp3-128/internetradio">Stream: BRF 91.4</option>
-  <option value="radio888">Playlist: RadioBerlin 88.8</option>
-	<option value="radioeins">Playlist: radioeins</option>
-</select></td>
-<td class="tbltd"><select name="zoneSelect" id="zoneSelect">
-</select></td>
-<td class="tbltd"><a onclick="createAlarm()" href="#"><i class="fa fa-plus-square"></i></a></td>
-</tr>
-</table>
-	</p>
+	<h2>Configured Alarms</h2>
+
+	<div class="Rtable Rtable--5cols Rtable--collapse" name="currentAlarms" id="currentAlarms">
+	</div>
+
+	<h2>Create New Alarm</h2>
+	<div class="Rtable Rtable--6cols Rtable--collapse">
+	  <div class="Rtable-cell Rtable-cell--head">
+			<input id="timepicker" class="timepicker text-center bgfix widthfix" jt-timepicker time="model.time" time-string="model.timeString" default-time="model.options.defaultTime" time-format="model.options.timeFormat" start-time="model.options.startTime" min-time="model.options.minTime" max-time="model.options.maxTime" interval="model.options.interval" dynamic="model.options.dynamic" scrollbar="model.options.scrollbar" dropdown="model.options.dropdown" />
+		</div>
+	  <div class="Rtable-cell">
+			<select name="timeframeSelect" id="timeframeSelect" class="widthfix">
+				<option value="Mon-Fri">Mon-Fri</option>
+				<option value="Sat-Sun">Sat-Sun</option>
+			</select>
+		</div>
+		<div class="Rtable-cell">
+			<select name="streamSelect" id="streamSelect" class="widthfix">
+			</select>
+		</div>
+		<div class="Rtable-cell">
+			<select name="raumfeldZoneSelect" id="raumfeldZoneSelect" class="widthfix">
+			</select>
+		</div>
+		<div class="Rtable-cell">
+			<select name="endVolumeSelect" id="endVolumeSelect" class="widthfix">
+				<option value="35">Silent (35)</option>
+				<option value="40">Normal (40)</option>
+				<option value="45">Loud (45)</option>
+			</select>
+		</div>
+		<div class="Rtable-cell Rtable-cell--foot">
+			<input class="widthfix" type="button" onclick="createAlarm()" id="alarmEnabled" value="Add" />
+		</div>
+	</div>
+
 	<script src="https://ajax.googleapis.com/ajax/libs/jquery/1/jquery.min.js"></script>
 	<script src="https://netdna.bootstrapcdn.com/bootstrap/3.1.1/js/bootstrap.min.js"></script>
 	<script src="https://cdnjs.cloudflare.com/ajax/libs/timepicker/1.3.5/jquery.timepicker.min.js"></script>
