@@ -1,6 +1,6 @@
 package main
 
-var IndexHtml = `<!DOCTYPE html>
+var indexHTML = `<!DOCTYPE html>
 <html>
 
 <head>

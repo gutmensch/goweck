@@ -1,4 +1,4 @@
-package appbase
+package app
 
 import (
         "os"

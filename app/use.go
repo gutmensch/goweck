@@ -1,4 +1,4 @@
-package appbase
+package app
 
 func Use(vals ...interface{}) {
     for _, val := range vals {
