@@ -276,8 +276,8 @@ var indexHTML = `<!DOCTYPE html>
 			if (data !== "null") {
 				JSON.parse(data).forEach(function(stream) {
 					var s = document.createElement("option");
-					s.text = stream.Name;
-					s.value = stream.Name;
+					s.text = stream.name;
+					s.value = stream.name;
 					t.add(s);
 				});
 			}
