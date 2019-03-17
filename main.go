@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
@@ -19,13 +20,13 @@ import (
 	"github.com/imdario/mergo"
 )
 
-type Stream struct {
+type stream struct {
 	ID   bson.ObjectId `bson:"_id,omitempty"    json:"_id,omitempty"`
 	Name string        `bson:"name,omitempty"   json:"name,omitempty"`
 	URL  string        `bson:"url,omitempty"    json:"url,omitempty"`
 }
 
-type Alarm struct {
+type alarm struct {
 	ID            bson.ObjectId `bson:"_id,omitempty"           json:"_id,omitempty"`
 	Status        string        `bson:"status,omitempty"        json:"status,omitempty"`
 	HourMinute    string        `bson:"hourMinute,omitempty"    json:"hourMinute,omitempty"`
@@ -43,7 +44,7 @@ type Alarm struct {
 	Timeout       int           `bson:"timeout,omitempty"       json:"timeout,omitempty"`
 }
 
-type RendererState struct {
+type rendererState struct {
 	Action string `json:"action,omitempty`
 	Data   []struct {
 		URI    string `json:"AVTransportURI,omitempty"`
@@ -55,7 +56,7 @@ type RendererState struct {
 }
 
 // this is madnessting for sure
-type ZoneData struct {
+type zoneData struct {
 	Action string `json:"action,omitempty`
 	Data   struct {
 		ZoneConfig struct {
@@ -79,35 +80,47 @@ type ZoneData struct {
 	Message string `json:"msg,omitempty"`
 }
 
-type SimpleZone struct {
+type simpleZone struct {
 	Udn  string `json:"udn,omitempty"`
 	Name string `json:"name,omitempty"`
 }
 
 var (
-	Debug, _           = strconv.ParseBool(app.GetEnvVar("DEBUG", "false"))
-	RaumserverDebug, _ = strconv.ParseBool(app.GetEnvVar("RAUMSERVER_DEBUG", "false"))
-	MongoDbDrop, _     = strconv.ParseBool(app.GetEnvVar("MONGODB_DROP", "false"))
-	MongoDb            = app.GetEnvVar("MONGODB_DATABASE", "goweck")
-	MongoURI           = app.GetEnvVar("MONGODB_URI", "mongodb://127.0.0.1:27017")
-	Listen             = app.GetEnvVar("LISTEN", ":8080")
-	CheckInterval      = 5
-	Database           *mgo.Database
-	RaumserverURI      = app.GetEnvVar("RAUMSERVER_URI", "http://qnap:3535/raumserver")
-	StreamName         = app.GetEnvVar("STREAM", "Rock Antenne")
-	TimeZone           = app.GetEnvVar("TZ", "UTC")
-	PushOverUser       = app.GetEnvVar("PUSHOVER_USER_TOKEN", "undefined")
-	PushOverApp        = app.GetEnvVar("PUSHOVER_APP_TOKEN", "undefined")
-	AlarmActive        = false
-	NetClient          = &http.Client{Timeout: time.Second * 10}
-	RadioStreams       = []Stream{
-		Stream{
+	Debug, _             = strconv.ParseBool(app.GetEnvVar("DEBUG", "false"))
+	RaumserverDebug, _   = strconv.ParseBool(app.GetEnvVar("RAUMSERVER_DEBUG", "false"))
+	MongoDbDrop, _       = strconv.ParseBool(app.GetEnvVar("MONGODB_DROP", "false"))
+	MongoDb              = app.GetEnvVar("MONGODB_DATABASE", "goweck")
+	MongoURI             = app.GetEnvVar("MONGODB_URI", "mongodb://127.0.0.1:27017")
+	Listen               = app.GetEnvVar("LISTEN", ":8080")
+	CheckInterval        = 5
+	Database             *mgo.Database
+	enableDeepStandby, _ = strconv.ParseBool(app.GetEnvVar("DEEP_STANDBY", "false"))
+	RaumserverURI        = app.GetEnvVar("RAUMSERVER_URI", "http://qnap:3535/raumserver")
+	TimeZone             = app.GetEnvVar("TZ", "UTC")
+	PushOverUser         = app.GetEnvVar("PUSHOVER_USER_TOKEN", "undefined")
+	PushOverApp          = app.GetEnvVar("PUSHOVER_APP_TOKEN", "undefined")
+	AlarmActive          = false
+	NetClient            = &http.Client{Timeout: time.Second * 10}
+	RadioStreams         = []stream{
+		stream{
 			Name: "Rock Antenne",
 			URL:  "http://mp3channels.webradio.rockantenne.de/alternative",
 		},
-		Stream{
+		stream{
+			Name: "Radio 21 Rock",
+			URL:  "http://188.94.97.91/radio21.mp3",
+		},
+		stream{
 			Name: "BRF 91.4",
 			URL:  "http://stream.berliner-rundfunk.de/brf/mp3-128/internetradio",
+		},
+		stream{
+			Name: "RadioEins",
+			URL:  "http://radioeins.de/stream",
+		},
+		stream{
+			Name: "Fritz",
+			URL:  "http://fritz.de/livemp3",
 		},
 	}
 )
@@ -127,23 +140,35 @@ func raumfeldAction(raumfeld string, uri string, params map[string]string) ([]by
 		fmt.Println(req.URL.String())
 	}
 	resp, err := NetClient.Do(req)
-	if RaumserverDebug {
+	if RaumserverDebug && err != nil {
 		fmt.Println(resp)
 	}
-	respData, _ := ioutil.ReadAll(resp.Body)
-	return respData, err
+	if resp != nil {
+		respData, err := ioutil.ReadAll(resp.Body)
+		return respData, err
+	}
+	return nil, errors.New("request to raumserver failed")
 }
 
-func playRaumfeldStream(alarm *Alarm) error {
+func getStreamURL(name string) string {
+	for _, s := range RadioStreams {
+		if s.Name == name {
+			return s.URL
+		}
+	}
+	return "not found"
+}
+
+func playRaumfeldStream(alarm *alarm) error {
 	params := map[string]string{
 		"id":    alarm.ZoneUUID,
-		"value": alarm.StreamName,
+		"value": getStreamURL(alarm.StreamName),
 	}
 	_, err := raumfeldAction(alarm.RaumserverURI, "/controller/loadUri", params)
 	return err
 }
 
-func playRaumfeldPlaylist(alarm *Alarm) error {
+func playRaumfeldPlaylist(alarm *alarm) error {
 	params := map[string]string{
 		"id":    alarm.ZoneUUID,
 		"value": alarm.StreamName,
@@ -152,7 +177,7 @@ func playRaumfeldPlaylist(alarm *Alarm) error {
 	return err
 }
 
-func adjustRaumfeldVolume(alarm *Alarm, volume int) error {
+func adjustRaumfeldVolume(alarm *alarm, volume int) error {
 	params := map[string]string{
 		"id":    alarm.ZoneUUID,
 		"scope": "zone",
@@ -162,7 +187,7 @@ func adjustRaumfeldVolume(alarm *Alarm, volume int) error {
 	return err
 }
 
-func stopRaumfeldStream(alarm *Alarm) error {
+func stopRaumfeldStream(alarm *alarm) error {
 	params := map[string]string{
 		"id": alarm.ZoneUUID,
 	}
@@ -170,7 +195,7 @@ func stopRaumfeldStream(alarm *Alarm) error {
 	return err
 }
 
-func leaveStandby(alarm *Alarm) error {
+func leaveStandby(alarm *alarm) error {
 	params := map[string]string{
 		"id": alarm.ZoneUUID,
 	}
@@ -178,7 +203,7 @@ func leaveStandby(alarm *Alarm) error {
 	return err
 }
 
-func enterStandby(alarm *Alarm) error {
+func enterStandby(alarm *alarm) error {
 	params := map[string]string{
 		"id": alarm.ZoneUUID,
 	}
@@ -186,11 +211,11 @@ func enterStandby(alarm *Alarm) error {
 	return err
 }
 
-func checkTransportState(alarm *Alarm) (bool, error) {
+func checkTransportState(alarm *alarm) (bool, error) {
 	params := map[string]string{
 		"id": alarm.ZoneUUID,
 	}
-	var rendererState RendererState
+	var rendererState rendererState
 	data, err := raumfeldAction(alarm.RaumserverURI, "/data/getRendererState", params)
 	err = json.Unmarshal(data, &rendererState)
 	if Debug {
@@ -205,10 +230,14 @@ func checkTransportState(alarm *Alarm) (bool, error) {
 	return true, err
 }
 
-func getZones() (ZoneData, error) {
+func getZones() (zoneData, error) {
 	params := map[string]string{}
-	var zoneData ZoneData
+	var zoneData zoneData
 	data, err := raumfeldAction(RaumserverURI, "/data/getZoneConfig", params)
+	if err != nil && Debug {
+		app.Log(err)
+		return zoneData, err
+	}
 	err = json.Unmarshal(data, &zoneData)
 	if Debug {
 		if err != nil {
@@ -222,7 +251,10 @@ func getZones() (ZoneData, error) {
 func getZoneName(uuid string) string {
 	zoneName := "unknown"
 	var friendlyName []string
-	zoneData, _ := getZones()
+	zoneData, err := getZones()
+	if err != nil {
+		return zoneName
+	}
 	for _, zones := range zoneData.Data.ZoneConfig.Zones {
 		for _, realZone := range zones.Zone {
 			friendlyName = []string{}
@@ -253,19 +285,16 @@ func sendFallbackMessage() error {
 	return err
 }
 
-func executeAlarm(alarm *Alarm) {
+func executeAlarm(alarm *alarm) {
 	// play stream for wake up
-	// XXX: disable deep standby
-	// err := leaveStandby(alarm)
-	// app.Log(err)
+	if enableDeepStandby {
+		leaveStandby(alarm)
+	}
+
 	time.Sleep(10 * time.Second)
 	err := adjustRaumfeldVolume(alarm, alarm.VolumeStart)
 	app.Log(err)
-	if isStream(alarm.StreamName) {
-		err = playRaumfeldStream(alarm)
-	} else {
-		err = playRaumfeldPlaylist(alarm)
-	}
+	err = playRaumfeldStream(alarm)
 	app.Log(err)
 	// inc volume over time
 	steps := alarm.VolumeEnd - alarm.VolumeStart
@@ -274,11 +303,7 @@ func executeAlarm(alarm *Alarm) {
 		running, _ := checkTransportState(alarm)
 		if (i%5) == 0 && !running {
 			errCount++
-			if isStream(alarm.StreamName) {
-				err = playRaumfeldStream(alarm)
-			} else {
-				err = playRaumfeldPlaylist(alarm)
-			}
+			err = playRaumfeldStream(alarm)
 			app.Log(err)
 		}
 		if errCount >= 3 {
@@ -301,14 +326,14 @@ func executeAlarm(alarm *Alarm) {
 	app.Log(err)
 	err = stopRaumfeldStream(alarm)
 	app.Log(err)
-	// XXX: disable deep standboy
-	// err = enterStandby(alarm)
-	// app.Log(err)
+	if enableDeepStandby {
+		enterStandby(alarm)
+	}
 	AlarmActive = false
 }
 
 func pollAlarm() {
-	var result Alarm
+	var result alarm
 	c := Database.C("alarm").With(Database.Session.Copy())
 
 	for {
@@ -402,7 +427,7 @@ func ensureIndices() {
 }
 
 func populateStreams() {
-	var result Stream
+	var result stream
 	for _, stream := range RadioStreams {
 		c := Database.C("stream").With(Database.Session.Copy())
 		dupStream := c.Find(bson.M{
@@ -421,24 +446,24 @@ func populateStreams() {
 
 func httpRouter() *mux.Router {
 	r := mux.NewRouter()
-	r.HandleFunc("/alarm/all", http.HandlerFunc(AlarmListHandler)).Methods("GET")
-	r.HandleFunc("/zone/all", http.HandlerFunc(ZoneListHandler)).Methods("GET")
-	r.HandleFunc("/stream/all", http.HandlerFunc(StreamListHandler)).Methods("GET")
-	r.HandleFunc("/alarm/create", http.HandlerFunc(AlarmCreateHandler)).Methods("POST")
-	r.HandleFunc("/alarm/stop", http.HandlerFunc(AlarmStopHandler)).Methods("POST")
-	r.HandleFunc("/alarm/update/{id:[0-9a-f]{24}}", http.HandlerFunc(AlarmUpdateHandler)).Methods("POST")
-	r.HandleFunc("/alarm/delete/{id:[0-9a-f]{24}}", http.HandlerFunc(AlarmDeleteHandler)).Methods("DELETE")
-	r.HandleFunc("/", http.HandlerFunc(IndexHandler)).Methods("GET")
-	r.HandleFunc("/index.html", http.HandlerFunc(IndexHandler)).Methods("GET")
+	r.HandleFunc("/alarm/all", http.HandlerFunc(alarmListHandler)).Methods("GET")
+	r.HandleFunc("/zone/all", http.HandlerFunc(zoneListHandler)).Methods("GET")
+	r.HandleFunc("/stream/all", http.HandlerFunc(streamListHandler)).Methods("GET")
+	r.HandleFunc("/alarm/create", http.HandlerFunc(alarmCreateHandler)).Methods("POST")
+	r.HandleFunc("/alarm/stop", http.HandlerFunc(alarmStopHandler)).Methods("POST")
+	r.HandleFunc("/alarm/update/{id:[0-9a-f]{24}}", http.HandlerFunc(alarmUpdateHandler)).Methods("POST")
+	r.HandleFunc("/alarm/delete/{id:[0-9a-f]{24}}", http.HandlerFunc(alarmDeleteHandler)).Methods("DELETE")
+	r.HandleFunc("/", http.HandlerFunc(indexHandler)).Methods("GET")
+	r.HandleFunc("/index.html", http.HandlerFunc(indexHandler)).Methods("GET")
 	return r
 }
 
-func IndexHandler(w http.ResponseWriter, r *http.Request) {
+func indexHandler(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(indexHTML))
 }
 
-func AlarmListHandler(w http.ResponseWriter, r *http.Request) {
-	var results []Alarm
+func alarmListHandler(w http.ResponseWriter, r *http.Request) {
+	var results []alarm
 	c := Database.C("alarm").With(Database.Session.Copy())
 	err := c.Find(bson.M{}).All(&results)
 	app.Fatal(err)
@@ -448,13 +473,16 @@ func AlarmListHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "%q\n", string(e))
 }
 
-func ZoneListHandler(w http.ResponseWriter, r *http.Request) {
-	var zones ZoneData
-	var nz []SimpleZone
-	var z SimpleZone
+func zoneListHandler(w http.ResponseWriter, r *http.Request) {
+	var zones zoneData
+	var nz []simpleZone
+	var z simpleZone
 	var friendlyName []string
 	zones, err := getZones()
-	app.Log(err)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
 	for _, zone := range zones.Data.ZoneConfig.Zones {
 		for _, realZone := range zone.Zone {
 			friendlyName = []string{}
@@ -471,8 +499,8 @@ func ZoneListHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "%q\n", string(e))
 }
 
-func StreamListHandler(w http.ResponseWriter, r *http.Request) {
-	var results []Stream
+func streamListHandler(w http.ResponseWriter, r *http.Request) {
+	var results []stream
 	c := Database.C("stream").With(Database.Session.Copy())
 	err := c.Find(bson.M{}).All(&results)
 	app.Fatal(err)
@@ -482,10 +510,10 @@ func StreamListHandler(w http.ResponseWriter, r *http.Request) {
 	fmt.Fprintf(w, "%q\n", string(e))
 }
 
-func AlarmUpdateHandler(w http.ResponseWriter, r *http.Request) {
+func alarmUpdateHandler(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	app.Fatal(err)
-	var new, old Alarm
+	var new, old alarm
 	err = json.Unmarshal(body, &new)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -510,7 +538,7 @@ func AlarmUpdateHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func AlarmDeleteHandler(w http.ResponseWriter, r *http.Request) {
+func alarmDeleteHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	c := Database.C("alarm").With(Database.Session.Copy())
 	err := c.RemoveId(bson.ObjectIdHex(vars["id"]))
@@ -521,15 +549,15 @@ func AlarmDeleteHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-func AlarmStopHandler(w http.ResponseWriter, r *http.Request) {
+func alarmStopHandler(w http.ResponseWriter, r *http.Request) {
 	// vars := mux.Vars(r)
 	w.WriteHeader(http.StatusOK)
 }
 
-func AlarmCreateHandler(w http.ResponseWriter, r *http.Request) {
+func alarmCreateHandler(w http.ResponseWriter, r *http.Request) {
 	body, err := ioutil.ReadAll(r.Body)
 	app.Fatal(err)
-	var new, def, result Alarm
+	var new, def, result alarm
 	err = json.Unmarshal(body, &new)
 	if err != nil {
 		w.WriteHeader(http.StatusBadRequest)
@@ -548,14 +576,14 @@ func AlarmCreateHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	def = Alarm{
+	def = alarm{
 		Status:        "Active",
 		HourMinute:    "08:00",
 		LastModified:  time.Now().String(),
 		WeekDays:      strconv.FormatBool(true),
 		WeekEnds:      strconv.FormatBool(false),
 		RaumserverURI: RaumserverURI,
-		StreamName:    StreamName,
+		StreamName:    "NOT_SET",
 		ZoneUUID:      "",
 		ZoneName:      getZoneName(new.ZoneUUID),
 		VolumeStart:   5,
