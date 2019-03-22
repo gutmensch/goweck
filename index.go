@@ -303,7 +303,7 @@ var indexHTML = `<!DOCTYPE html>
 			weekEnds: weekEndsVal,
 			zoneUuid: document.getElementById('raumfeldZoneSelect').value,
       streamName: document.getElementById('streamSelect').value,
-			endVolume: document.getElementById('endVolumeSelect').value
+		  volumeEnd: document.getElementById('endVolumeSelect').value
 		};
 		$.ajax({
 			url: '/alarm/create',
