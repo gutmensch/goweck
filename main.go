@@ -26,6 +26,11 @@ type stream struct {
 	URL  string        `bson:"url,omitempty"    json:"url,omitempty"`
 }
 
+type alarmState struct {
+	ID    bson.ObjectId `json:"_id,omitempty"`
+	state bool          `json:"state,omitempty"`
+}
+
 type alarm struct {
 	ID            bson.ObjectId `bson:"_id,omitempty"           json:"_id,omitempty"`
 	Status        string        `bson:"status,omitempty"        json:"status,omitempty"`
@@ -285,51 +290,80 @@ func sendFallbackMessage() error {
 	return err
 }
 
-func executeAlarm(alarm *alarm) {
-	// play stream for wake up
-	if enableDeepStandby {
-		leaveStandby(alarm)
-	}
-
-	time.Sleep(10 * time.Second)
-	err := adjustRaumfeldVolume(alarm, alarm.VolumeStart)
-	app.Log(err)
-	err = playRaumfeldStream(alarm)
-	app.Log(err)
-	// inc volume over time
+func increaseVolume(alarm *alarm) {
 	steps := alarm.VolumeEnd - alarm.VolumeStart
-	errCount := 0
 	for i := 1; i <= steps; i++ {
-		running, _ := checkTransportState(alarm)
-		if (i%5) == 0 && !running {
-			errCount++
-			err = playRaumfeldStream(alarm)
-			app.Log(err)
-		}
-		if errCount >= 3 {
-			// fallback: send pushover notification to wake up the guy
-			err = sendFallbackMessage()
-			app.Log(err)
-			errCount = 0
+		if !AlarmActive {
+			return
 		}
 		if Debug {
 			fmt.Println("adjusting volume to", alarm.VolumeStart+i)
 		}
-		err = adjustRaumfeldVolume(alarm, alarm.VolumeStart+i)
+		err := adjustRaumfeldVolume(alarm, alarm.VolumeStart+i)
 		app.Log(err)
 		time.Sleep(time.Duration(alarm.VolumeIncInt) * time.Second)
 	}
-	// sleep for the rest of the alarm active time
-	time.Sleep(time.Duration(alarm.Timeout-steps*alarm.VolumeIncInt) * time.Second)
-	// cleanup and unset alarm
-	err = adjustRaumfeldVolume(alarm, alarm.VolumeStart)
+}
+
+func fallbackToPushover(alarm *alarm) {
+	errCount := 1
+	errCountEscalate := 1
+	for {
+		if !AlarmActive {
+			return
+		}
+		running, _ := checkTransportState(alarm)
+		if !running {
+			errCount++
+		}
+		if (errCount % 10) == 0 {
+			errCountEscalate++
+			err := playRaumfeldStream(alarm)
+			app.Log(err)
+		}
+		if (errCountEscalate % 5) == 0 {
+			err := sendFallbackMessage()
+			app.Log(err)
+			errCount = 1
+			errCountEscalate = 1
+		}
+		time.Sleep(1 * time.Second)
+	}
+}
+
+func startAlarm(alarm *alarm) {
+	// play stream for wake up
+	//if enableDeepStandby {
+	leaveStandby(alarm)
+	//}
+	go increaseVolume(alarm)
+	err := playRaumfeldStream(alarm)
 	app.Log(err)
-	err = stopRaumfeldStream(alarm)
+
+	// send pushover notification as fallback
+	go fallbackToPushover(alarm)
+}
+
+func stopAlarm(alarm *alarm) {
+	err := stopRaumfeldStream(alarm)
+	app.Log(err)
+	err = adjustRaumfeldVolume(alarm, alarm.VolumeStart)
 	app.Log(err)
 	if enableDeepStandby {
 		enterStandby(alarm)
 	}
+}
+
+func executeAlarm(alarm *alarm) {
+	startAlarm(alarm)
+	for i := alarm.Timeout; i > 0; i-- {
+		if !AlarmActive {
+			break
+		}
+		time.Sleep(1 * time.Second)
+	}
 	AlarmActive = false
+	stopAlarm(alarm)
 }
 
 func pollAlarm() {
@@ -339,7 +373,7 @@ func pollAlarm() {
 	for {
 		<-time.After(time.Duration(CheckInterval) * time.Second)
 
-		if AlarmActive == true {
+		if AlarmActive {
 			fmt.Println("[pollAlarm] alarm is currently active")
 			continue
 		}
@@ -550,7 +584,7 @@ func alarmDeleteHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func alarmStopHandler(w http.ResponseWriter, r *http.Request) {
-	// vars := mux.Vars(r)
+	AlarmActive = false
 	w.WriteHeader(http.StatusOK)
 }
 

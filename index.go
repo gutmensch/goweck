@@ -13,6 +13,7 @@ var indexHTML = `<!DOCTYPE html>
 	<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/modernizr/2.8.3/modernizr.min.js"></script>
 
 	<style type="text/css">
+	  @import url('https://fonts.googleapis.com/css?family=Roboto+Condensed');
 		/* Variables
 		================================== */
 		/* Tables
@@ -27,7 +28,7 @@ var indexHTML = `<!DOCTYPE html>
 		  box-sizing: border-box;
 		  flex-grow: 1;
 		  width: 100%;
-		  padding: 0.8em 1.2em;
+		  padding: 0.8em;
 		  overflow: hidden;
 		  list-style: none;
 		  border: solid 3px white;
@@ -60,18 +61,6 @@ var indexHTML = `<!DOCTYPE html>
 		}
 		/* Page styling
 		================================== */
-		@font-face {
-		  font-family: 'Josefin Sans';
-		  font-style: normal;
-		  font-weight: 400;
-		  src: local('Josefin Sans Regular'), local('JosefinSans-Regular'), url(https://fonts.gstatic.com/s/josefinsans/v12/Qw3aZQNVED7rKGKxtqIqX5EUDXx9.ttf) format('truetype');
-		}
-		@font-face {
-		  font-family: 'Josefin Sans';
-		  font-style: normal;
-		  font-weight: 700;
-		  src: local('Josefin Sans Bold'), local('JosefinSans-Bold'), url(https://fonts.gstatic.com/s/josefinsans/v12/Qw3FZQNVED7rKGKxtqIqX5Ectllte10k.ttf) format('truetype');
-		}
 		html {
 		  height: 100%;
 		  background-color: #EEE;
@@ -80,9 +69,9 @@ var indexHTML = `<!DOCTYPE html>
 		  box-sizing: border-box;
 		  min-height: 100%;
 		  margin: 0 auto;
-		  padding: 1.2em;
+		  padding: 0.8em;
 		  max-width: 1000px;
-		  font-family: 'Josefin Sans', sans-serif;
+		  font-family: 'Roboto Condensed', sans-serif;
 		  font-size: 2em;
 		  background-color: white;
 		  border: double 3px #DDD;
@@ -237,6 +226,10 @@ var indexHTML = `<!DOCTYPE html>
           streamCol.className = "Rtable-cell";
 					streamCol.appendChild(document.createTextNode(alarm.streamName));
 
+					var volumeEndCol = document.createElement('div');
+          volumeEndCol.className = "Rtable-cell";
+					volumeEndCol.appendChild(document.createTextNode('EndVol: ' + alarm.volumeEnd));
+
 					var deleteCol = document.createElement('div');
           deleteCol.className = "Rtable-cell Rtable-cell--foot";
 					var deleteButton = document.createElement('input');
@@ -250,6 +243,7 @@ var indexHTML = `<!DOCTYPE html>
 					t.appendChild(timeCol);
 					t.appendChild(timeframeCol);
 					t.appendChild(streamCol);
+					t.appendChild(volumeEndCol);
 					t.appendChild(deleteCol);
 				});
 		  }
@@ -348,7 +342,7 @@ var indexHTML = `<!DOCTYPE html>
 
 	<h2>Configured Alarms</h2>
 
-	<div class="Rtable Rtable--5cols Rtable--collapse" name="currentAlarms" id="currentAlarms">
+	<div class="Rtable Rtable--6cols Rtable--collapse" name="currentAlarms" id="currentAlarms">
 	</div>
 
 	<h2>Create New Alarm</h2>
