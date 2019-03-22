@@ -387,7 +387,7 @@ var indexHTML = `<!DOCTYPE html>
     	minTime: '00',
     	maxTime: '23',
     	defaultTime: '07',
-    	startTime: '04',
+    	startTime: '00',
     	dynamic: false,
     	dropdown: true,
     	scrollbar: true
