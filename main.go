@@ -485,6 +485,7 @@ func httpRouter() *mux.Router {
 	r.HandleFunc("/stream/all", http.HandlerFunc(streamListHandler)).Methods("GET")
 	r.HandleFunc("/alarm/create", http.HandlerFunc(alarmCreateHandler)).Methods("POST")
 	r.HandleFunc("/alarm/stop", http.HandlerFunc(alarmStopHandler)).Methods("POST")
+	r.HandleFunc("/alarm/running", http.HandlerFunc(alarmRunningHandler)).Methods("GET")
 	r.HandleFunc("/alarm/update/{id:[0-9a-f]{24}}", http.HandlerFunc(alarmUpdateHandler)).Methods("POST")
 	r.HandleFunc("/alarm/delete/{id:[0-9a-f]{24}}", http.HandlerFunc(alarmDeleteHandler)).Methods("DELETE")
 	r.HandleFunc("/", http.HandlerFunc(indexHandler)).Methods("GET")
@@ -505,6 +506,14 @@ func alarmListHandler(w http.ResponseWriter, r *http.Request) {
 	app.Log(err)
 	w.WriteHeader(http.StatusOK)
 	fmt.Fprintf(w, "%q\n", string(e))
+}
+
+func alarmRunningHandler(w http.ResponseWriter, r *http.Request) {
+	if AlarmActive {
+		w.WriteHeader(http.StatusNoContent)
+	} else {
+		w.WriteHeader(http.StatusNotFound)
+	}
 }
 
 func zoneListHandler(w http.ResponseWriter, r *http.Request) {

@@ -376,6 +376,21 @@ var indexHTML = `<!DOCTYPE html>
 		  cursor: pointer;
 		}
 	</style>
+
+
+</head>
+
+<body onload="getAlarms();populateZoneSelect();populateStreamSelect();checkRunningAlarm()">
+
+<!-- The Modal -->
+<div id="myModal" class="modal">
+
+  <!-- Modal content -->
+  <div class="modal-content">
+    <span class="close">Stop Alarm</span>
+  </div>
+
+</div>
 	<script>
 	// Get the modal
 	var modal = document.getElementById('myModal');
@@ -400,31 +415,16 @@ var indexHTML = `<!DOCTYPE html>
 	span.onclick = function() {
 		stopAlarm();
 		getAlarms();
-	  modal.style.display = "none";
+		modal.style.display = "none";
 	}
 
 	// When the user clicks anywhere outside of the modal, close it
 	window.onclick = function(event) {
-	  if (event.target == modal) {
-	    modal.style.display = "none";
-	  }
+		if (event.target == modal) {
+			modal.style.display = "none";
+		}
 	}
 	</script>
-
-</head>
-
-<body onload="getAlarms();populateZoneSelect();populateStreamSelect();checkRunningAlarm()">
-
-<!-- The Modal -->
-<div id="myModal" class="modal">
-
-  <!-- Modal content -->
-  <div class="modal-content">
-    <span class="close">Stop Alarm</span>
-  </div>
-
-</div>
-
 	<h2>Configured Alarms</h2>
 
 	<div class="Rtable Rtable--6cols Rtable--collapse" name="currentAlarms" id="currentAlarms">
