@@ -322,7 +322,7 @@ var indexHTML = `<!DOCTYPE html>
 			url: '/alarm/stop',
 			type: 'POST',
 			success: function(data) {
-				getAlarms();
+				console.log('alarm stopped successfully')
 			}
 		});
 	}
@@ -359,14 +359,17 @@ var indexHTML = `<!DOCTYPE html>
 		  padding: 20px;
 		  border: 1px solid #888;
 		  width: 80%;
+			height: 10%;
+			text-align: center;
 		}
 
 		/* The Close Button */
 		.close {
-		  color: #dddddd;
-		  float: center;
-		  font-size: 20px;
+		  color: #555555;
+			float: inherit;
+		  font-size: 32px;
 		  font-weight: bold;
+			opacity: .7;
 		}
 
 		.close:hover,
@@ -414,7 +417,6 @@ var indexHTML = `<!DOCTYPE html>
 	// When the user clicks on <span> (x), close the modal
 	span.onclick = function() {
 		stopAlarm();
-		getAlarms();
 		modal.style.display = "none";
 	}
 
