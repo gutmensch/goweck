@@ -367,7 +367,7 @@ var indexHTML = `<!DOCTYPE html>
 		.close {
 		  color: #555555;
 			float: inherit;
-		  font-size: 32px;
+		  font-size: 2.2em;
 		  font-weight: bold;
 			opacity: .7;
 		}
