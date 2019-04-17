@@ -494,7 +494,10 @@ func httpRouter() *mux.Router {
 }
 
 func indexHandler(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte(indexHTML))
+        data, _ := Asset("asset"+r.URL.Path)
+        w.Header().Set("Content-Type", "text/html")
+        w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+        w.Write(data)
 }
 
 func alarmListHandler(w http.ResponseWriter, r *http.Request) {
