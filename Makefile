@@ -16,7 +16,7 @@ bindata :
 
 lint :
 	@echo === Running style checks
-	golint
+	-golint
 
 test :
 	@echo === Running tests
@@ -24,7 +24,7 @@ test :
 
 build :
 	@echo === Building goweck
-	go build
+	go build -ldflags="-s -w"
 
 clean :
 	@echo === Cleaning up
