@@ -8,6 +8,7 @@ deps :
 	-go get -u github.com/gorilla/mux
 	-go get -u github.com/gregdel/pushover
 	-go get -u github.com/imdario/mergo
+	-go get -u golang.org/x/lint/golint
 
 bindata :
 	@echo === Converting static assets to bindata
