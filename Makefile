@@ -1,4 +1,13 @@
-goweck : clean bindata lint test build
+goweck : clean deps bindata lint test build
+
+deps :
+	@echo === Collecting dependencies
+	-go get -u github.com/go-bindata/go-bindata/...
+	-go get -u github.com/globalsign/mgo
+	-go get -u github.com/globalsign/mgo/bson
+	-go get -u github.com/gorilla/mux
+	-go get -u github.com/gregdel/pushover
+	-go get -u github.com/imdario/mergo
 
 bindata :
 	@echo === Converting static assets to bindata
