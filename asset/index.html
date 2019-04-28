@@ -198,7 +198,10 @@
 		t.innerHTML = "";
 		$.getJSON("/alarm/all", function(data) {
 			if (data !== "null") {
+                                h.style.display = "block";
+                                t.style.display = "flex";
 				JSON.parse(data).forEach(function(alarm) {
+					// active / inactive toggle
 					var statusCol = document.createElement('div');
           statusCol.className = "Rtable-cell Rtable-cell--head";
 					var statusButton = document.createElement('input');
@@ -209,25 +212,20 @@
 					statusButton.setAttribute('onclick', 'toggleAlarm("' + alarm['_id'] + '","' + toggleStatus + '")')
 					statusCol.appendChild(statusButton);
 
+					// time and days
 					var timeCol = document.createElement('div');
           timeCol.className = "Rtable-cell";
 					var heading = document.createElement('h3');
-					heading.innerHTML = alarm.hourMinute;
+					var timeframe = (alarm.weekDays === "true") ? "Mon-Fri" : "Sat-Sun";
+					heading.innerHTML = alarm.hourMinute + ' ' + timeframe;
 					timeCol.appendChild(heading);
 
-					var timeframeCol = document.createElement('div');
-          timeframeCol.className = "Rtable-cell";
-					var timeframe = (alarm.weekDays === "true") ? "Mon-Fri" : "Sat-Sun";
-					timeframeCol.appendChild(document.createTextNode(timeframe));
-
+					// stream and volume
 					var streamCol = document.createElement('div');
           streamCol.className = "Rtable-cell";
-					streamCol.appendChild(document.createTextNode(alarm.streamName));
+					streamCol.appendChild(document.createTextNode(alarm.streamName + ' - MaxVol. ' + alarm.volumeEnd));
 
-					var volumeEndCol = document.createElement('div');
-          volumeEndCol.className = "Rtable-cell";
-					volumeEndCol.appendChild(document.createTextNode('EndVol: ' + alarm.volumeEnd));
-
+					// delete
 					var deleteCol = document.createElement('div');
           deleteCol.className = "Rtable-cell Rtable-cell--foot";
 					var deleteButton = document.createElement('input');
@@ -239,41 +237,48 @@
 
 					t.appendChild(statusCol);
 					t.appendChild(timeCol);
-					t.appendChild(timeframeCol);
+					//t.appendChild(timeframeCol);
 					t.appendChild(streamCol);
-					t.appendChild(volumeEndCol);
+					//t.appendChild(volumeEndCol);
 					t.appendChild(deleteCol);
 				});
-		  }
+                  } else {
+                                h.style.display = "none";
+                                t.style.display = "none";
+                  }
 		});
 	}
 	function populateZoneSelect() {
 		var t = document.getElementById('raumfeldZoneSelect');
-		t.innerHTML = "";
-		$.getJSON("/zone/all", function(data) {
-			if (data !== "null") {
-				JSON.parse(data).forEach(function(zone) {
-					var s = document.createElement("option");
-					s.text = zone.name;
-					s.value = zone.udn;
-					t.add(s);
-				});
-		  }
-		});
+		if (t !== null) {
+			t.innerHTML = "";
+			$.getJSON("/zone/all", function(data) {
+				if (data !== "null") {
+					JSON.parse(data).forEach(function(zone) {
+						var s = document.createElement("option");
+						s.text = zone.name;
+						s.value = zone.udn;
+						t.add(s);
+					});
+			  }
+			});
+		}
 	}
 	function populateStreamSelect() {
 		var t = document.getElementById('streamSelect');
-		t.innerHTML = "";
-		$.getJSON("/stream/all", function(data) {
-			if (data !== "null") {
-				JSON.parse(data).forEach(function(stream) {
-					var s = document.createElement("option");
-					s.text = stream.name;
-					s.value = stream.name;
-					t.add(s);
-				});
-			}
-		});
+		if (t !== null) {
+			t.innerHTML = "";
+			$.getJSON("/stream/all", function(data) {
+				if (data !== "null") {
+					JSON.parse(data).forEach(function(stream) {
+						var s = document.createElement("option");
+						s.text = stream.name;
+						s.value = stream.name;
+						t.add(s);
+					});
+				}
+			});
+		}
 	}
 	function toggleAlarm(id, curr) {
 		var alarmUpdate = {
@@ -425,10 +430,9 @@
 		}
 	}
 	</script>
-	<h2>Configured Alarms</h2>
 
-	<div class="Rtable Rtable--6cols Rtable--collapse" name="currentAlarms" id="currentAlarms">
-	</div>
+  <h2 id="configuredAlarmsHeading" style="display:none">Configured Alarms</h2>
+  <div class="Rtable Rtable--4cols Rtable--collapse" name="currentAlarms" id="currentAlarms" style="display:none"></div>
 
 	<h2>Create New Alarm</h2>
 	<div class="Rtable Rtable--6cols Rtable--collapse">

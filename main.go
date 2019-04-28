@@ -2,14 +2,11 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
 	"net/http"
-	"regexp"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/globalsign/mgo"
@@ -17,6 +14,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/gregdel/pushover"
 	"github.com/gutmensch/goweck/app"
+	"github.com/gutmensch/goweck/raumserver"
 	"github.com/imdario/mergo"
 )
 
@@ -26,11 +24,6 @@ type stream struct {
 	URL  string        `bson:"url,omitempty"    json:"url,omitempty"`
 }
 
-type alarmState struct {
-	ID    bson.ObjectId `json:"_id,omitempty"`
-	state bool          `json:"state,omitempty"`
-}
-
 type alarm struct {
 	ID            bson.ObjectId `bson:"_id,omitempty"           json:"_id,omitempty"`
 	Status        string        `bson:"status,omitempty"        json:"status,omitempty"`
@@ -38,7 +31,6 @@ type alarm struct {
 	LastModified  string        `bson:"lastModified,omitempty"  json:"lastModified,omitempty"`
 	WeekDays      string        `bson:"weekDays,omitempty"      json:"weekDays,omitempty"`
 	WeekEnds      string        `bson:"weekEnds,omitempty"      json:"weekEnds,omitempty"`
-	RaumserverURI string        `bson:"raumserverUri,omitempty" json:"raumserverUri,omitempty"`
 	ZoneUUID      string        `bson:"zoneUuid,omitempty"      json:"zoneUuid,omitempty"`
 	ZoneName      string        `bson:"zoneName,omitempty"      json:"zoneName,omitempty"`
 	StreamName    string        `bson:"streamName,omitempty"    json:"streamName,omitempty"`
@@ -49,50 +41,8 @@ type alarm struct {
 	Timeout       int           `bson:"timeout,omitempty"       json:"timeout,omitempty"`
 }
 
-type rendererState struct {
-	Action string `json:"action,omitempty`
-	Data   []struct {
-		URI    string `json:"AVTransportURI,omitempty"`
-		State  string `json:"TransportState,omitempty"`
-		Status string `json:"TransportStatus,omitempty"`
-	} `json:"data,omitempty"`
-	Error   bool   `json:"error,omitempty`
-	Message string `json:"msg,omitempty"`
-}
-
-// this is madnessting for sure
-type zoneData struct {
-	Action string `json:"action,omitempty`
-	Data   struct {
-		ZoneConfig struct {
-			Zones []struct {
-				Zone []struct {
-					Self struct {
-						Udn string `json:"udn,omitempty"`
-					} `json:"$,omitempty"`
-					Room []struct {
-						Self struct {
-							Name       string `json:"name,omitempty"`
-							PowerState string `json:"powerState,omitempty"`
-							Udn        string `json:"udn,omitempty"`
-						} `json:"$,omitempty"`
-					} `json:"room,omitempty"`
-				} `json:"zone,omitempty"`
-			} `json:"zones,omitempty"`
-		} `json:"zoneConfig,omitempty"`
-	} `json:"data,omitempty"`
-	Error   bool   `json:"error,omitempty`
-	Message string `json:"msg,omitempty"`
-}
-
-type simpleZone struct {
-	Udn  string `json:"udn,omitempty"`
-	Name string `json:"name,omitempty"`
-}
-
 var (
 	Debug, _             = strconv.ParseBool(app.GetEnvVar("DEBUG", "false"))
-	RaumserverDebug, _   = strconv.ParseBool(app.GetEnvVar("RAUMSERVER_DEBUG", "false"))
 	MongoDbDrop, _       = strconv.ParseBool(app.GetEnvVar("MONGODB_DROP", "false"))
 	MongoDb              = app.GetEnvVar("MONGODB_DATABASE", "goweck")
 	MongoURI             = app.GetEnvVar("MONGODB_URI", "mongodb://127.0.0.1:27017")
@@ -100,12 +50,10 @@ var (
 	CheckInterval        = 5
 	Database             *mgo.Database
 	enableDeepStandby, _ = strconv.ParseBool(app.GetEnvVar("DEEP_STANDBY", "false"))
-	RaumserverURI        = app.GetEnvVar("RAUMSERVER_URI", "http://qnap:3535/raumserver")
 	TimeZone             = app.GetEnvVar("TZ", "UTC")
 	PushOverUser         = app.GetEnvVar("PUSHOVER_USER_TOKEN", "undefined")
 	PushOverApp          = app.GetEnvVar("PUSHOVER_APP_TOKEN", "undefined")
 	AlarmActive          = false
-	NetClient            = &http.Client{Timeout: time.Second * 10}
 	RadioStreams         = []stream{
 		stream{
 			Name: "Rock Antenne",
@@ -130,31 +78,6 @@ var (
 	}
 )
 
-func raumfeldAction(raumfeld string, uri string, params map[string]string) ([]byte, error) {
-	req, err := http.NewRequest("GET", fmt.Sprintf("%s%s", raumfeld, uri), nil)
-	if err != nil {
-		return nil, err
-	}
-
-	q := req.URL.Query()
-	for k, v := range params {
-		q.Add(k, v)
-	}
-	req.URL.RawQuery = q.Encode()
-	if RaumserverDebug {
-		fmt.Println(req.URL.String())
-	}
-	resp, err := NetClient.Do(req)
-	if RaumserverDebug && err != nil {
-		fmt.Println(resp)
-	}
-	if resp != nil {
-		respData, err := ioutil.ReadAll(resp.Body)
-		return respData, err
-	}
-	return nil, errors.New("request to raumserver failed")
-}
-
 func getStreamURL(name string) string {
 	for _, s := range RadioStreams {
 		if s.Name == name {
@@ -162,121 +85,6 @@ func getStreamURL(name string) string {
 		}
 	}
 	return "not found"
-}
-
-func playRaumfeldStream(alarm *alarm) error {
-	params := map[string]string{
-		"id":    alarm.ZoneUUID,
-		"value": getStreamURL(alarm.StreamName),
-	}
-	_, err := raumfeldAction(alarm.RaumserverURI, "/controller/loadUri", params)
-	return err
-}
-
-func playRaumfeldPlaylist(alarm *alarm) error {
-	params := map[string]string{
-		"id":    alarm.ZoneUUID,
-		"value": alarm.StreamName,
-	}
-	_, err := raumfeldAction(alarm.RaumserverURI, "/controller/loadPlaylist", params)
-	return err
-}
-
-func adjustRaumfeldVolume(alarm *alarm, volume int) error {
-	params := map[string]string{
-		"id":    alarm.ZoneUUID,
-		"scope": "zone",
-		"value": fmt.Sprint(volume),
-	}
-	_, err := raumfeldAction(alarm.RaumserverURI, "/controller/setVolume", params)
-	return err
-}
-
-func stopRaumfeldStream(alarm *alarm) error {
-	params := map[string]string{
-		"id": alarm.ZoneUUID,
-	}
-	_, err := raumfeldAction(alarm.RaumserverURI, "/controller/stop", params)
-	return err
-}
-
-func leaveStandby(alarm *alarm) error {
-	params := map[string]string{
-		"id": alarm.ZoneUUID,
-	}
-	_, err := raumfeldAction(alarm.RaumserverURI, "/controller/leaveStandby", params)
-	return err
-}
-
-func enterStandby(alarm *alarm) error {
-	params := map[string]string{
-		"id": alarm.ZoneUUID,
-	}
-	_, err := raumfeldAction(alarm.RaumserverURI, "/controller/enterManualStandby", params)
-	return err
-}
-
-func checkTransportState(alarm *alarm) (bool, error) {
-	params := map[string]string{
-		"id": alarm.ZoneUUID,
-	}
-	var rendererState rendererState
-	data, err := raumfeldAction(alarm.RaumserverURI, "/data/getRendererState", params)
-	err = json.Unmarshal(data, &rendererState)
-	if Debug {
-		if err != nil {
-			fmt.Println(err.Error())
-		}
-		fmt.Println(rendererState)
-	}
-	if rendererState.Data[0].State != "PLAYING" {
-		return false, err
-	}
-	return true, err
-}
-
-func getZones() (zoneData, error) {
-	params := map[string]string{}
-	var zoneData zoneData
-	data, err := raumfeldAction(RaumserverURI, "/data/getZoneConfig", params)
-	if err != nil && Debug {
-		app.Log(err)
-		return zoneData, err
-	}
-	err = json.Unmarshal(data, &zoneData)
-	if Debug {
-		if err != nil {
-			fmt.Println(err.Error())
-		}
-		fmt.Println(zoneData)
-	}
-	return zoneData, err
-}
-
-func getZoneName(uuid string) string {
-	zoneName := "unknown"
-	var friendlyName []string
-	zoneData, err := getZones()
-	if err != nil {
-		return zoneName
-	}
-	for _, zones := range zoneData.Data.ZoneConfig.Zones {
-		for _, realZone := range zones.Zone {
-			friendlyName = []string{}
-			for _, room := range realZone.Room {
-				friendlyName = append(friendlyName, room.Self.Name)
-			}
-			if realZone.Self.Udn == uuid {
-				zoneName = strings.Join(friendlyName, ", ")
-			}
-		}
-	}
-	return zoneName
-}
-
-func isStream(s string) bool {
-	validStream := regexp.MustCompile(`^https?://`)
-	return validStream.MatchString(s)
 }
 
 func sendFallbackMessage() error {
@@ -299,7 +107,7 @@ func increaseVolume(alarm *alarm) {
 		if Debug {
 			fmt.Println("adjusting volume to", alarm.VolumeStart+i)
 		}
-		err := adjustRaumfeldVolume(alarm, alarm.VolumeStart+i)
+		err := raumserver.AdjustRaumfeldVolume(alarm.ZoneUUID, alarm.VolumeStart+i)
 		app.Log(err)
 		time.Sleep(time.Duration(alarm.VolumeIncInt) * time.Second)
 	}
@@ -312,13 +120,13 @@ func fallbackToPushover(alarm *alarm) {
 		if !AlarmActive {
 			return
 		}
-		running, _ := checkTransportState(alarm)
+		running, _ := raumserver.CheckTransportState(alarm.ZoneUUID)
 		if !running {
 			errCount++
 		}
 		if (errCount % 10) == 0 {
 			errCountEscalate++
-			err := playRaumfeldStream(alarm)
+			err := raumserver.PlayRaumfeldStream(alarm.ZoneUUID, getStreamURL(alarm.StreamName))
 			app.Log(err)
 		}
 		if (errCountEscalate % 5) == 0 {
@@ -334,10 +142,10 @@ func fallbackToPushover(alarm *alarm) {
 func startAlarm(alarm *alarm) {
 	// play stream for wake up
 	//if enableDeepStandby {
-	leaveStandby(alarm)
+	raumserver.LeaveStandby(alarm.ZoneUUID)
 	//}
 	go increaseVolume(alarm)
-	err := playRaumfeldStream(alarm)
+	err := raumserver.PlayRaumfeldStream(alarm.ZoneUUID, getStreamURL(alarm.StreamName))
 	app.Log(err)
 
 	// send pushover notification as fallback
@@ -345,12 +153,12 @@ func startAlarm(alarm *alarm) {
 }
 
 func stopAlarm(alarm *alarm) {
-	err := stopRaumfeldStream(alarm)
+	err := raumserver.StopRaumfeldStream(alarm.ZoneUUID)
 	app.Log(err)
-	err = adjustRaumfeldVolume(alarm, alarm.VolumeStart)
+	err = raumserver.AdjustRaumfeldVolume(alarm.ZoneUUID, alarm.VolumeStart)
 	app.Log(err)
 	if enableDeepStandby {
-		enterStandby(alarm)
+		raumserver.EnterStandby(alarm.ZoneUUID)
 	}
 }
 
@@ -412,7 +220,7 @@ func pollAlarm() {
 }
 
 func main() {
-	session, err := mgo.Dial(MongoURI)
+	session, err := mgo.DialWithTimeout(MongoURI, 5*time.Second)
 	defer session.Close()
 	app.Fatal(err)
 
@@ -494,16 +302,16 @@ func httpRouter() *mux.Router {
 }
 
 func indexHandler(w http.ResponseWriter, r *http.Request) {
-        data, _ := Asset("asset"+r.URL.Path)
-        w.Header().Set("Content-Type", "text/html")
-        w.Header().Set("Content-Length", strconv.Itoa(len(data)))
-        w.Write(data)
+	data, _ := Asset("asset/index.html")
+	w.Header().Set("Content-Type", "text/html")
+	w.Header().Set("Content-Length", strconv.Itoa(len(data)))
+	w.Write(data)
 }
 
 func alarmListHandler(w http.ResponseWriter, r *http.Request) {
 	var results []alarm
 	c := Database.C("alarm").With(Database.Session.Copy())
-	err := c.Find(bson.M{}).All(&results)
+	err := c.Find(bson.M{}).Sort("status", "hourMinute").All(&results)
 	app.Fatal(err)
 	e, err := json.Marshal(results)
 	app.Log(err)
@@ -520,29 +328,12 @@ func alarmRunningHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func zoneListHandler(w http.ResponseWriter, r *http.Request) {
-	var zones zoneData
-	var nz []simpleZone
-	var z simpleZone
-	var friendlyName []string
-	zones, err := getZones()
+	zones, err := raumserver.GetZoneListJSON()
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	for _, zone := range zones.Data.ZoneConfig.Zones {
-		for _, realZone := range zone.Zone {
-			friendlyName = []string{}
-			z.Udn = realZone.Self.Udn
-			for _, room := range realZone.Room {
-				friendlyName = append(friendlyName, room.Self.Name)
-			}
-			z.Name = strings.Join(friendlyName, ", ")
-			nz = append(nz, z)
-		}
-	}
-	e, err := json.Marshal(nz)
-	app.Log(err)
-	fmt.Fprintf(w, "%q\n", string(e))
+	fmt.Fprintf(w, "%q\n", zones)
 }
 
 func streamListHandler(w http.ResponseWriter, r *http.Request) {
@@ -628,10 +419,9 @@ func alarmCreateHandler(w http.ResponseWriter, r *http.Request) {
 		LastModified:  time.Now().String(),
 		WeekDays:      strconv.FormatBool(true),
 		WeekEnds:      strconv.FormatBool(false),
-		RaumserverURI: RaumserverURI,
 		StreamName:    "NOT_SET",
 		ZoneUUID:      "",
-		ZoneName:      getZoneName(new.ZoneUUID),
+		ZoneName:      raumserver.GetZoneName(new.ZoneUUID),
 		VolumeStart:   5,
 		VolumeEnd:     40,
 		VolumeIncStep: 1,

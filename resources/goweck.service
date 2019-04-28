@@ -1,0 +1,22 @@
+root@raspi3:/home/pi# cat /etc/systemd/system/goweck.service
+[Unit]
+Description=GoWeck Radio Wecker
+After=network.target mongodb.service
+
+[Service]
+Type=simple
+Environment=TZ=Europe/Berlin
+Environment=MONGODB_URI=mongodb://127.0.0.1:27017
+Environment=MONGODB_DATABASE=goweck
+Environment=MONGODB_DROP=false
+Environment=RAUMSERVER_URI=http://127.0.0.1:3000/raumserver
+Environment=PUSHOVER_APP_TOKEN=xxx
+Environment=PUSHOVER_USER_TOKEN=yyy
+Environment=DEBUG=false
+Environment=LISTEN=:8080
+Restart=always
+RestartSec=3
+ExecStart=/home/pi/go/bin/goweck
+
+[Install]
+WantedBy=multi-user.target
