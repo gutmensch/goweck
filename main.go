@@ -95,10 +95,10 @@ func getStreamURL(name string) string {
 	return "not found"
 }
 
-func sendFallbackMessage() error {
+func sendFallbackMessage(msg string) error {
 	app := pushover.New(PushOverApp)
 	recipient := pushover.NewRecipient(PushOverUser)
-	message := pushover.NewMessageWithTitle("Wake up please!", "GoWeck")
+	message := pushover.NewMessageWithTitle(msg, "GoWeck")
 	response, err := app.SendMessage(message, recipient)
 	if Debug {
 		fmt.Println(response)
@@ -138,7 +138,7 @@ func fallbackToPushover(alarm *alarm) {
 			app.Log(err)
 		}
 		if (errCountEscalate % 5) == 0 {
-			err := sendFallbackMessage()
+			err := sendFallbackMessage("Wake up, please!")
 			app.Log(err)
 			errCount = 1
 			errCountEscalate = 1
@@ -250,6 +250,9 @@ func main() {
 
 	// execute or change alarms periodically
 	go pollAlarm()
+
+	// pushover test when starting
+	go sendFallbackMessage("GoWeck starting up...")
 
 	// http endpoint for dealing with alarms
 	router := httpRouter()
