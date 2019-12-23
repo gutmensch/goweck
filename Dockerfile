@@ -7,6 +7,9 @@ RUN adduser -D -g '' appuser
 COPY . $GOPATH/src/github.com/gutmensch/goweck/
 WORKDIR $GOPATH/src/github.com/gutmensch/goweck/
 
+RUN go get -u github.com/go-bindata/go-bindata/... \
+  && go-bindata -o bindata.go asset/
+
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOFLAGS=-mod=vendor go build -a -installsuffix cgo -ldflags="-w -s" -o /go/bin/goweck \
   && strip -s /go/bin/goweck \
   && upx /go/bin/goweck
