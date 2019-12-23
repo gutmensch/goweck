@@ -194,7 +194,11 @@ func pollAlarm() {
 			continue
 		}
 
-		loc, _ := time.LoadLocation(TimeZone)
+		loc, err := time.LoadLocation(TimeZone)
+		if err != nil {
+			fmt.Printf("Error loading time zone %s with error %s\n", TimeZone, err.Error())
+			continue
+		}
 		t := time.Now().In(loc)
 
 		search := bson.M{}
@@ -213,7 +217,7 @@ func pollAlarm() {
 			}
 		}
 
-		err := c.Find(search).One(&result)
+		err = c.Find(search).One(&result)
 		if err == mgo.ErrNotFound || err != nil {
 			if Debug {
 				fmt.Println(err.Error())
@@ -249,6 +253,7 @@ func main() {
 
 	// http endpoint for dealing with alarms
 	router := httpRouter()
+	fmt.Printf("Listening on %s.\n", Listen)
 	log.Fatal(http.ListenAndServe(Listen, router))
 }
 

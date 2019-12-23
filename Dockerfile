@@ -1,7 +1,6 @@
-FROM golang:alpine as builder
+FROM golang:alpine AS builder
 
 RUN apk update && apk add --no-cache git ca-certificates upx binutils
-
 RUN adduser -D -g '' appuser
 
 COPY . $GOPATH/src/github.com/gutmensch/goweck/
@@ -15,10 +14,19 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 GOFLAGS=-mod=vendor go build -a -insta
   && upx /go/bin/goweck
 
 FROM scratch
+
+ARG LISTEN_PORT="8081"
+
+COPY --from=builder /usr/local/go/lib/time/zoneinfo.zip /usr/local/go/lib/time/zoneinfo.zip
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --from=builder /etc/passwd /etc/passwd
 COPY --from=builder /go/bin/goweck /go/bin/goweck
 
+ENV ZONEINFO=/usr/local/go/lib/time/zoneinfo.zip
+ENV LISTEN=":${LISTEN_PORT}"
+
 USER appuser
+
+EXPOSE ${LISTEN_PORT}
 
 ENTRYPOINT ["/go/bin/goweck"]
