@@ -75,6 +75,14 @@ var (
 			Name: "Fritz",
 			URL:  "http://fritz.de/livemp3",
 		},
+		stream{
+			Name: "Oldies but Goldies",
+			URL:  "http://mp3channels.webradio.antenne.de/oldies-but-goldies",
+		},
+		stream{
+			Name: "MPD",
+			URL:  "http://qnaps:8800",
+		},
 	}
 )
 
