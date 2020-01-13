@@ -159,6 +159,9 @@ func CheckTransportState(zoneUUID string) (bool, error) {
 		}
 		fmt.Println(rendererState)
 	}
+	if len(rendererState.Data) == 0 {
+		return false, err
+	}
 	if rendererState.Data[0].State != "PLAYING" {
 		return false, err
 	}
