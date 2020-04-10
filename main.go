@@ -150,10 +150,10 @@ func fallbackToPushover(alarm *alarm) {
 func startAlarm(alarm *alarm) {
 	// play stream for wake up
 	//if enableDeepStandby {
-	raumserver.LeaveStandby(alarm.ZoneUUID)
+	err := raumserver.LeaveStandby(alarm.ZoneUUID)
 	//}
 	go increaseVolume(alarm)
-	err := raumserver.PlayRaumfeldStream(alarm.ZoneUUID, getStreamURL(alarm.StreamName))
+	err = raumserver.PlayRaumfeldStream(alarm.ZoneUUID, getStreamURL(alarm.StreamName))
 	app.Log(err)
 
 	// send pushover notification as fallback
@@ -166,7 +166,7 @@ func stopAlarm(alarm *alarm) {
 	err = raumserver.AdjustRaumfeldVolume(alarm.ZoneUUID, alarm.VolumeStart)
 	app.Log(err)
 	if enableDeepStandby {
-		raumserver.EnterStandby(alarm.ZoneUUID)
+		err = raumserver.EnterStandby(alarm.ZoneUUID)
 	}
 }
 
@@ -233,8 +233,8 @@ func pollAlarm() {
 
 func main() {
 	session, err := mgo.DialWithTimeout(MongoURI, 5*time.Second)
-	defer session.Close()
 	app.Fatal(err)
+	defer session.Close()
 
 	session.SetMode(mgo.Monotonic, true)
 
