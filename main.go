@@ -61,7 +61,7 @@ var (
 		},
 		stream{
 			Name: "Radio 21 Rock",
-			URL:  "http://188.94.97.91/radio21.mp3",
+			URL:  "http://stream.radio21.de/radio21.mp3",
 		},
 		stream{
 			Name: "BRF 91.4",
