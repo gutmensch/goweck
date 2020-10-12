@@ -54,7 +54,7 @@ var (
 	PushOverUser         = app.GetEnvVar("PUSHOVER_USER_TOKEN", "undefined")
 	PushOverApp          = app.GetEnvVar("PUSHOVER_APP_TOKEN", "undefined")
 	AlarmActive          = false
-	RadioStreams         = []stream{
+	DefaultRadioStreams  = []stream{
 		stream{
 			Name: "Rock Antenne",
 			URL:  "http://mp3channels.webradio.rockantenne.de/alternative",
@@ -87,12 +87,14 @@ var (
 )
 
 func getStreamURL(name string) string {
-	for _, s := range RadioStreams {
-		if s.Name == name {
-			return s.URL
-		}
+	var result stream
+	c := Database.C("stream").With(Database.Session.Copy())
+	err := c.Find(bson.M{"name": name}).One(&result)
+	if err != nil {
+		return "not found"
+	} else {
+		return result.URL
 	}
-	return "not found"
 }
 
 func sendFallbackMessage(msg string) error {
@@ -286,7 +288,7 @@ func ensureIndices() {
 
 func populateStreams() {
 	var result stream
-	for _, stream := range RadioStreams {
+	for _, stream := range DefaultRadioStreams {
 		c := Database.C("stream").With(Database.Session.Copy())
 		dupStream := c.Find(bson.M{
 			"name": stream.Name,
