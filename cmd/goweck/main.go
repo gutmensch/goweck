@@ -6,6 +6,7 @@ import (
 	"github.com/gutmensch/goweck/internal/common"
 	"github.com/gutmensch/goweck/internal/datastore"
 	"github.com/gutmensch/goweck/internal/http"
+	"github.com/gutmensch/goweck/internal/job"
 	"github.com/gutmensch/goweck/internal/raumserver"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
@@ -21,11 +22,8 @@ import (
 )
 
 var (
-	Debug, _             = strconv.ParseBool(common.GetEnvVar("DEBUG", "false"))
-	MongoDbDrop, _       = strconv.ParseBool(common.GetEnvVar("MONGODB_DROP", "false"))
-	MongoURI             = common.GetEnvVar("MONGODB_URI", "mongodb://127.0.0.1:27017")
-	Listen               = common.GetEnvVar("LISTEN", ":8080")
-	CheckInterval        = 5
+	Debug, _ = strconv.ParseBool(common.GetEnvVar("DEBUG", "false"))
+
 	Database             *mgo.Database
 	enableDeepStandby, _ = strconv.ParseBool(common.GetEnvVar("DEEP_STANDBY", "false"))
 	TimeZone             = common.GetEnvVar("TZ", "UTC")
@@ -181,7 +179,13 @@ func pollAlarm() {
 	}
 }
 
+func 
+
 func main() {
+	var checkInterval time.Duration
+	var dropOnInit bool
+	var listen string
+	var err error
 
 	// context and shutdown handling on signals
 	ctx, cancel := context.WithCancel(context.Background())
@@ -192,13 +196,14 @@ func main() {
 		cancel()
 	}()
 
+	if dropOnInit, err = strconv.ParseBool(common.GetEnvVar("MONGODB_DROP", "false")); err != nil {
+		common.Log.Error("error parsing drop on init", zap.Error(err))
+		os.Exit(1)
+	}
 	datastore := datastore.New(datastore.Config{
-		Type: "mongodb",
-		URI:  common.GetEnvVar("MONGODB_URI", "mongodb://127.0.0.1:27017/goweck"),
-		DropOnInit: func() bool {
-			d, _ := strconv.ParseBool(common.GetEnvVar("MONGODB_DROP", "false"))
-			return d
-		}(),
+		Type:       "mongodb",
+		URI:        common.GetEnvVar("MONGODB_URI", "mongodb://127.0.0.1:27017/goweck"),
+		DropOnInit: dropOnInit,
 	})
 
 	// concurrent processes
@@ -212,13 +217,18 @@ func main() {
 		return server.Run(ctx)
 	})
 
-	alarmWatcher := &job.PollJob{
-		FetchReportCount: 10,
-		FetchInterval:    config.Conf.FetchInterval,
+	if checkInterval, err = time.ParseDuration(common.GetEnvVar("CHECK_INTERVAL", "10s")); err != nil {
+		common.Log.Error("error parsing check interval", zap.Error(err))
+		os.Exit(1)
+	}
+
+	alarmWatcher := &job.AlarmWatcher{
+		TimeZone:      common.GetEnvVar("TZ", "UTC"),
+		CheckInterval: checkInterval,
 	}
 	group.Go(func() error {
-		common.Log.Info("starting report fetch job", zap.Duration("interval_s", config.Conf.FetchInterval))
-		return fetchJob.Run(ctx)
+		common.Log.Info("starting alarmwatcher", zap.Duration("interval_s", checkInterval))
+		return alarmWatcher.Run(ctx)
 	})
 
 	// wait for processes

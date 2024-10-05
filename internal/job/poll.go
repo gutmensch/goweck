@@ -1,7 +1,17 @@
 package job
 
-import "github.com/gutmensch/goweck/internal/datastore"
+import (
+	"context"
+	"github.com/gutmensch/goweck/internal/datastore"
+	"time"
+)
 
-type Poll struct {
-	Datastore datastore.Datastore
+type AlarmWatcher struct {
+	Datastore     datastore.Datastore
+	TimeZone      string
+	CheckInterval time.Duration
+}
+
+func (a AlarmWatcher) Run(ctx context.Context) error {
+	return nil
 }
