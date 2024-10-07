@@ -118,73 +118,10 @@ func stopAlarm(alarm *datastore.Alarm) {
 	}
 }
 
-func executeAlarm(alarm *datastore.Alarm) {
-	startAlarm(alarm)
-	for i := alarm.Timeout; i > 0; i-- {
-		if !AlarmActive {
-			break
-		}
-		time.Sleep(1 * time.Second)
-	}
-	AlarmActive = false
-	stopAlarm(alarm)
-}
-
-func pollAlarm() {
-	var result datastore.Alarm
-	c := Database.C("alarm").With(Database.Session.Copy())
-
-	for {
-		<-time.After(time.Duration(CheckInterval) * time.Second)
-
-		if AlarmActive {
-			fmt.Println("[pollAlarm] alarm is currently active")
-			continue
-		}
-
-		loc, err := time.LoadLocation(TimeZone)
-		if err != nil {
-			fmt.Printf("Error loading time zone %s with error %s\n", TimeZone, err.Error())
-			continue
-		}
-		t := time.Now().In(loc)
-
-		search := bson.M{}
-		switch int(t.Weekday()) {
-		case 0, 6:
-			search = bson.M{
-				"status":     "active",
-				"hourMinute": fmt.Sprintf("%02d:%02d", t.Hour(), t.Minute()),
-				"weekEnds":   strconv.FormatBool(true),
-			}
-		case 1, 2, 3, 4, 5:
-			search = bson.M{
-				"status":     "active",
-				"hourMinute": fmt.Sprintf("%02d:%02d", t.Hour(), t.Minute()),
-				"weekDays":   strconv.FormatBool(true),
-			}
-		}
-
-		err = c.Find(search).One(&result)
-		if err == mgo.ErrNotFound || err != nil {
-			if Debug {
-				fmt.Println(err.Error())
-			}
-			continue
-		}
-
-		fmt.Println("[pollAlarm] alarm for current time and day found, executing.")
-		AlarmActive = true
-		go executeAlarm(&result)
-	}
-}
-
-func 
-
 func main() {
 	var checkInterval time.Duration
 	var dropOnInit bool
-	var listen string
+	var listen, timeZone string
 	var err error
 
 	// context and shutdown handling on signals
@@ -200,7 +137,7 @@ func main() {
 		common.Log.Error("error parsing drop on init", zap.Error(err))
 		os.Exit(1)
 	}
-	datastore := datastore.New(datastore.Config{
+	ds := datastore.New(datastore.Config{
 		Type:       "mongodb",
 		URI:        common.GetEnvVar("MONGODB_URI", "mongodb://127.0.0.1:27017/goweck"),
 		DropOnInit: dropOnInit,
@@ -209,21 +146,21 @@ func main() {
 	// concurrent processes
 	group, _ := errgroup.WithContext(ctx)
 
-	server := http.NewServer(
-		common.GetEnvVar("LISTEN", ":8080"),
-	)
+	listen = common.GetEnvVar("LISTEN", ":8080")
+	server := http.NewServer(listen)
 	group.Go(func() error {
 		common.Log.Info("starting http server")
 		return server.Run(ctx)
 	})
 
+	timeZone = common.GetEnvVar("TZ", "UTC")
 	if checkInterval, err = time.ParseDuration(common.GetEnvVar("CHECK_INTERVAL", "10s")); err != nil {
 		common.Log.Error("error parsing check interval", zap.Error(err))
 		os.Exit(1)
 	}
-
 	alarmWatcher := &job.AlarmWatcher{
-		TimeZone:      common.GetEnvVar("TZ", "UTC"),
+		Datastore:     ds,
+		TimeZone:      timeZone,
 		CheckInterval: checkInterval,
 	}
 	group.Go(func() error {
@@ -231,18 +168,11 @@ func main() {
 		return alarmWatcher.Run(ctx)
 	})
 
-	// wait for processes
-	if err := group.Wait(); err != nil {
-		common.Log.Error("error waiting for child processes", zap.Error(err))
-	}
-
-	// execute or change alarms periodically
-	go pollAlarm()
-
 	// pushover test when starting
 	go sendFallbackMessage("GoWeck starting up...")
 
-	// http endpoint for dealing with alarms
-	httpServer := http.NewServer()
-	httpServer.Run()
+	// wait for processes
+	if err = group.Wait(); err != nil {
+		common.Log.Error("error waiting for child processes", zap.Error(err))
+	}
 }
